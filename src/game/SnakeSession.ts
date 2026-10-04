@@ -63,6 +63,7 @@ export type SessionEvent =
     }
   | { readonly type: 'wrong'; readonly challenge: Challenge; readonly tile: Tile; readonly fatal: boolean; readonly attempt: number }
   | { readonly type: 'foodEaten'; readonly tile: Tile; readonly points: number }
+  | { readonly type: 'warmupComplete' }
   | { readonly type: 'selfBite'; readonly lost: readonly { x: number; y: number }[] }
   | { readonly type: 'bonk' }
   | { readonly type: 'died'; readonly cause: DeathCause }
@@ -112,6 +113,8 @@ export interface SessionOptions {
   readonly rules: ModeRules;
   /** Where questions come from. Not needed for Classic mode. */
   readonly source?: ChallengeSource;
+  /** Plain apples to eat before the first question (lets young players learn to steer first). */
+  readonly warmupFood?: number;
   readonly cols: number;
   readonly rows: number;
   readonly rng?: Rng;
@@ -136,6 +139,7 @@ export class SnakeSession implements SnakeWorld {
   private attempts = 0;
   private nextTileId = 1;
   private lastWrongLabel: string | null = null;
+  private warmupLeft: number;
   private readonly source: ChallengeSource;
   private readonly rng: Rng;
   private readonly emit: (event: SessionEvent) => void;
@@ -143,6 +147,7 @@ export class SnakeSession implements SnakeWorld {
   constructor(options: SessionOptions) {
     this.rules = options.rules;
     this.source = options.source ?? NO_CHALLENGES;
+    this.warmupLeft = options.source ? Math.max(0, options.warmupFood ?? 0) : 0;
     this.rng = options.rng ?? defaultRng;
     this.emit = options.onEvent ?? (() => undefined);
     this.arena = new Arena(options.cols, options.rows, options.rules.walls);
@@ -154,7 +159,7 @@ export class SnakeSession implements SnakeWorld {
 
   /** Spawns the first challenge. Separate from the constructor so listeners are in place first. */
   start(): void {
-    const ok = this.rules.mode === 'classic' ? this.spawnFood() : this.presentNextChallenge();
+    const ok = this.rules.mode === 'classic' || this.warmupLeft > 0 ? this.spawnFood() : this.presentNextChallenge();
     if (!ok) this.endBecauseArenaFull();
   }
 
@@ -177,6 +182,11 @@ export class SnakeSession implements SnakeWorld {
   get stepMs(): number {
     const r = this.rules;
     return Math.max(r.minStepMs, r.baseStepMs - this.score.correct * r.speedUpPerCorrectMs);
+  }
+
+  /** True while still eating warm-up apples (no questions yet). */
+  get inWarmup(): boolean {
+    return this.warmupLeft > 0;
   }
 
   get isMoving(): boolean {
@@ -306,6 +316,15 @@ export class SnakeSession implements SnakeWorld {
       const points = this.score.registerFood();
       this.snake.grow(this.rules.growthPerCorrect);
       this.emit({ type: 'foodEaten', tile, points });
+      if (this.rules.mode !== 'classic' && this.warmupLeft > 0) {
+        this.warmupLeft--;
+        if (this.warmupLeft === 0) {
+          // Warm-up done: a short pause, then the first number snack appears.
+          this.emit({ type: 'warmupComplete' });
+          this.beginTransition();
+          return;
+        }
+      }
       if (!this.spawnFood()) this.endBecauseArenaFull();
       return;
     }
@@ -474,7 +493,7 @@ export class SnakeSession implements SnakeWorld {
   /** The snake is so long there is no fair space left - an amazing achievement, not a failure. */
   private endBecauseArenaFull(): void {
     this.tileList = [];
-    if (this.rules.mode === 'learn') {
+    if (this.rules.wrongAnswer === 'forgive') {
       // Learn mode never ends in failure.
       this.currentPhase = { kind: 'complete' };
       this.emit({ type: 'sessionComplete' });

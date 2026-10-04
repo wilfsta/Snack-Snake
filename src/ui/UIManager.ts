@@ -12,6 +12,15 @@ export interface TableChoice {
   readonly wide?: boolean;
 }
 
+export interface MenuHandlers {
+  readonly worldName: string;
+  onWorld(): void;
+  onPlay(): void;
+  onLearn(): void;
+  onClassic(): void;
+  onOptions(): void;
+}
+
 export interface SubjectChoice {
   readonly id: string;
   readonly symbol: string;
@@ -152,7 +161,23 @@ export class UIManager {
     this.backAction = null;
   }
 
-  showMenu(onPlay: () => void, onLearn: () => void, onClassic: () => void, onOptions: () => void): void {
+  /**
+   * The front door. A young child should be able to start playing without reading anything:
+   * one huge, picture-led button into the world. Other modes sit quietly underneath.
+   */
+  showMenu(h: MenuHandlers): void {
+    const world = button(
+      el(
+        'span',
+        { class: 'world-card' },
+        el('span', { class: 'world-art', text: '🌻🐍🍎', attrs: { 'aria-hidden': 'true' } }),
+        el('span', { class: 'world-name', text: h.worldName }),
+        el('span', { class: 'world-go', text: '▶' }),
+      ),
+      'world-btn',
+      h.onWorld,
+      { 'data-autofocus': '', 'aria-label': `Play ${h.worldName}` },
+    );
     const screen = el(
       'div',
       { class: 'screen menu-screen' },
@@ -162,22 +187,26 @@ export class UIManager {
         el('span', { class: 'logo-a', text: 'Snack' }),
         el('span', { class: 'logo-b', text: 'Snake' }),
       ),
-      el('p', { class: 'tagline', text: 'Gobble the right answers!' }),
+      world,
       el(
         'div',
-        { class: 'mode-buttons' },
-        button(
-          this.modeCard('🏆', 'PLAY', 'Test what I know'),
-          'mode-btn mode-play',
-          onPlay,
-          { 'data-autofocus': '' },
-        ),
-        button(this.modeCard('🌱', 'LEARN', 'Help me learn'), 'mode-btn mode-learn', onLearn),
-        button(this.modeCard('🍎', 'CLASSIC', 'Original Snake'), 'mode-btn mode-classic', onClassic),
+        { class: 'more-games', attrs: { role: 'group', 'aria-label': 'More games' } },
+        button(this.smallMode('🏆', 'Play'), 'mini-mode mode-play', h.onPlay),
+        button(this.smallMode('🌱', 'Learn'), 'mini-mode mode-learn', h.onLearn),
+        button(this.smallMode('🍎', 'Classic'), 'mini-mode mode-classic', h.onClassic),
       ),
-      this.settingsRow(onOptions),
+      this.settingsRow(h.onOptions),
     );
     this.show(screen, null);
+  }
+
+  private smallMode(icon: string, title: string): HTMLElement {
+    return el(
+      'span',
+      { class: 'mini-card' },
+      el('span', { class: 'mini-icon', text: icon, attrs: { 'aria-hidden': 'true' } }),
+      el('span', { class: 'mini-title', text: title }),
+    );
   }
 
   showSubjectSelect(
@@ -489,16 +518,6 @@ export class UIManager {
     target?.focus({ preventScroll: true });
   }
 
-  private modeCard(icon: string, title: string, subtitle: string): HTMLElement {
-    return el(
-      'span',
-      { class: 'mode-card' },
-      el('span', { class: 'mode-icon', text: icon, attrs: { 'aria-hidden': 'true' } }),
-      el('span', { class: 'mode-title', text: title }),
-      el('span', { class: 'mode-sub', text: subtitle }),
-    );
-  }
-
   private stat(label: string, value: string): HTMLElement {
     return el('div', { class: 'stat' }, el('div', { class: 'stat-value', text: value }), el('div', { class: 'stat-label', text: label }));
   }
@@ -600,11 +619,12 @@ export class UIManager {
     this.hudScore.textContent = String(view.score);
     this.hudStreak.textContent = String(view.streak);
     this.hudBest.textContent = String(view.best);
+    // Garden: just a star count (the score chip). No scores, records or streaks to worry about.
     this.hudScoreBox.hidden = view.mode === 'learn';
-    this.hudBestBox.hidden = view.mode === 'learn';
-    this.hudStreakBox.hidden = view.mode === 'classic';
+    this.hudBestBox.hidden = view.mode === 'learn' || view.mode === 'garden';
+    this.hudStreakBox.hidden = view.mode === 'classic' || view.mode === 'garden';
     this.hudStreakBox.classList.toggle('hot', view.streak >= 3);
-    this.hudQuestion.textContent = view.question ? `${view.question} = ?` : '';
+    this.hudQuestion.textContent = view.question ? `${view.question.replace(/\n/g, '')} = ?` : '';
     this.hudQuestion.classList.toggle('visible', !!view.question);
 
     this.hudProgress.hidden = !view.progress;

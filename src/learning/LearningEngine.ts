@@ -21,6 +21,11 @@ export interface SessionHooks {
   onStateChange?: (change: StateChange) => void;
   /** Total answers shown per question, including the right one (default 5). */
   answerCount?: number;
+  /**
+   * When the learner is on a roll, try a new item as a plain question first. Right first time
+   * means they already know it, so the introduction and hinted practice are skipped.
+   */
+  probeNewItems?: boolean;
 }
 
 export const DEFAULT_ANSWER_COUNT = 5;
@@ -61,11 +66,15 @@ export class LearningEngine {
     return unit;
   }
 
-  /** Learn mode: introduce → guided → independent, finishing after `sessionLength` challenges. */
-  createLearnSession(unitId: string, sessionLength = 10, hooks: SessionHooks = {}): LearnSession {
-    const unit = this.requireUnit(unitId);
-    if (!unit.supportsLearning) throw new Error(`Unit ${unitId} cannot be used for learning`);
-    return new LearnSession(unit, this.tracker, this.content, this.rng, hooks, sessionLength);
+  /**
+   * Learn mode: introduce → guided → independent, finishing after `sessionLength` challenges
+   * (pass Infinity for an endless session). Accepts a unit id, or a unit object such as a world's
+   * learning path that spans several units.
+   */
+  createLearnSession(unit: string | LearningUnit, sessionLength = 10, hooks: SessionHooks = {}): LearnSession {
+    const resolved = typeof unit === 'string' ? this.requireUnit(unit) : unit;
+    if (!resolved.supportsLearning) throw new Error(`Unit ${resolved.id} cannot be used for learning`);
+    return new LearnSession(resolved, this.tracker, this.content, this.rng, hooks, sessionLength);
   }
 
   /** Play mode: endless independent recall across the whole unit. */
@@ -73,8 +82,8 @@ export class LearningEngine {
     return new PracticeSession(this.requireUnit(unitId), this.tracker, this.content, this.rng, hooks);
   }
 
-  summarizeUnit(unitId: string): UnitSummary {
-    const unit = this.requireUnit(unitId);
+  summarizeUnit(unitOrId: string | LearningUnit): UnitSummary {
+    const unit = typeof unitOrId === 'string' ? this.requireUnit(unitOrId) : unitOrId;
     const items = [...unit.itemIds]
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
       .map((itemId) => ({ itemId, ...this.content.describeItem(itemId), state: this.tracker.get(itemId).state }));
@@ -84,6 +93,8 @@ export class LearningEngine {
 
 abstract class BaseSession implements ChallengeSource {
   protected readonly recent: string[] = [];
+  /** First-try results of recent questions this session (true = right first time). */
+  protected readonly results: boolean[] = [];
   protected completed = 0;
 
   constructor(
@@ -91,7 +102,7 @@ abstract class BaseSession implements ChallengeSource {
     protected readonly tracker: LearningTracker,
     protected readonly content: LearningContent,
     protected readonly rng: Rng,
-    private readonly hooks: SessionHooks,
+    protected readonly hooks: SessionHooks,
   ) {}
 
   abstract next(): Challenge;
@@ -118,6 +129,10 @@ abstract class BaseSession implements ChallengeSource {
         break;
       case 'completed':
         this.completed++;
+        if (event.challenge.stage !== 'introduce') {
+          this.results.push(event.firstTryCorrect);
+          if (this.results.length > 8) this.results.shift();
+        }
         this.onCompleted();
         break;
     }
@@ -143,6 +158,7 @@ abstract class BaseSession implements ChallengeSource {
 
 export class LearnSession extends BaseSession {
   private sinceIntroduction = Number.POSITIVE_INFINITY;
+  private readonly probed = new Set<string>();
 
   constructor(
     unit: LearningUnit,
@@ -168,7 +184,14 @@ export class LearnSession extends BaseSession {
     const introduceNow = pending.length > 0 && (introduced.length < 2 || this.sinceIntroduction >= 2);
     if (introduceNow) {
       this.sinceIntroduction = 0;
-      return this.build(pending[0], { stage: 'introduce', hintStrength: 0 });
+      const next = pending[0];
+      // On a roll? Quietly check whether they already know it before teaching it. Each item is
+      // only tried this way once; if they don't know it, it is introduced properly next time.
+      if (this.hooks.probeNewItems && !this.probed.has(next.itemId) && this.onARoll()) {
+        this.probed.add(next.itemId);
+        return this.build(next, { stage: 'independent', hintStrength: 0 });
+      }
+      return this.build(next, { stage: 'introduce', hintStrength: 0 });
     }
 
     this.sinceIntroduction++;
@@ -182,6 +205,12 @@ export class LearnSession extends BaseSession {
       const progress = this.tracker.unitProgress(this.unit.id, this.initialUnlocked());
       this.tracker.setUnitProgress(this.unit.id, { ...progress, sessionsCompleted: progress.sessionsCompleted + 1 });
     }
+  }
+
+  /** The last four questions were all right first time. */
+  private onARoll(): boolean {
+    const last = this.results.slice(-4);
+    return last.length === 4 && last.every(Boolean);
   }
 
   private initialUnlocked(): number {

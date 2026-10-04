@@ -246,6 +246,38 @@ describe('SnakeSession', () => {
     expect(session.stepMs).toBeLessThan(CLASSIC_RULES.baseStepMs);
   });
 
+  it('GARDEN: plain apples first (no maths), then questions begin', () => {
+    const events: SessionEvent[] = [];
+    const session = new SnakeSession({
+      rules: buildRules('garden'),
+      source: new FakeSource('introduce'),
+      warmupFood: 2,
+      cols: 20,
+      rows: 13,
+      rng: seededRng(5),
+      onEvent: (e) => events.push(e),
+    });
+    session.start();
+    expect(session.inWarmup).toBe(true);
+    expect(session.tiles[0].kind).toBe('food');
+    expect(events.some((e) => e.type === 'challengePresented')).toBe(false);
+    waitFor(session, 'seek');
+    steerToFood(session);
+    expect(session.tiles[0].kind).toBe('food');
+    steerToFood(session);
+    expect(events.some((e) => e.type === 'warmupComplete')).toBe(true);
+    expect(session.inWarmup).toBe(false);
+    waitFor(session, 'seek');
+    expect(session.tiles[0].kind).toBe('fact');
+  });
+
+  it('GARDEN: nothing ends the game - wrong answers and walls are forgiven', () => {
+    const rules = buildRules('garden', { speed: 2, walls: 'solid', answerCount: 3 });
+    expect(rules.wrongAnswer).toBe('forgive');
+    expect(rules.selfCollision).toBe('trim');
+    expect(rules.wallCollision).toBe('bounce');
+  });
+
   it('solid walls end the game when the option is on', () => {
     const rules = buildRules('play', { speed: 2, walls: 'solid', answerCount: 5 });
     const { session, events } = makeSession(rules);

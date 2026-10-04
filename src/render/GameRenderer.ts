@@ -5,6 +5,7 @@ import type { Effects } from './Effects';
 import { computeLayout, FONT_STACK, type Layout } from './layout';
 import type { SnakeAnimator } from './SnakeAnimator';
 import { SnakeRenderer } from './SnakeRenderer';
+import type { ArenaThemeId } from './themes';
 import type { SnakeSkin } from './skins';
 import { drawHint, drawTile } from './tileRenderer';
 
@@ -15,6 +16,7 @@ export interface SceneOptions {
   readonly skin: SnakeSkin;
   /** Large centred caption, e.g. "Ready?" / "Go!". */
   readonly banner?: { readonly text: string; readonly age: number } | null;
+  readonly theme?: ArenaThemeId;
 }
 
 /** Owns the canvas: sizing for any screen and device pixel ratio, and drawing a frame. */
@@ -63,7 +65,7 @@ export class GameRenderer {
     const layout = this.layoutFor(world.arena.cols, world.arena.rows);
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.width, this.height);
-    this.arenaRenderer.draw(ctx, this.width, this.height, layout, world.arena, this.dpr);
+    this.arenaRenderer.draw(ctx, this.width, this.height, layout, world.arena, this.dpr, scene.theme);
 
     const time = world.time;
     for (const tile of world.tiles) drawHint(ctx, layout, tile, time);

@@ -22,16 +22,29 @@ export interface Tile extends Rect {
   mark: TileMark;
 }
 
-/** Tile footprint in cells, sized from its label so longer content (future spelling words) still fits. */
+/**
+ * Rough printed width of a line in "em" units. Emoji (pictures, e.g. counting apples) are about
+ * twice as wide as digits and letters.
+ */
+export function textWidthUnits(line: string): number {
+  let units = 0;
+  for (const ch of Array.from(line)) units += (ch.codePointAt(0) ?? 0) >= 0x1f000 ? 1.15 : 0.6;
+  return units;
+}
+
+/**
+ * Tile footprint in cells, sized from its label so longer content (future spelling words, pictures)
+ * still fits. Labels may contain "\n" for two lines; tiles are two cells tall either way.
+ */
 export function measureTile(kind: TileKind, label: string): { w: number; h: number } {
-  const chars = label.length;
+  const units = Math.max(0, ...label.split('\n').map(textWidthUnits));
   switch (kind) {
     case 'answer':
-      return { w: Math.max(2, Math.ceil(chars * 0.6)), h: 2 };
+      return { w: Math.max(2, Math.ceil(units)), h: 2 };
     case 'question':
-      return { w: Math.max(3, Math.ceil(chars * 0.4)), h: 2 };
+      return { w: Math.max(3, Math.ceil(units * 0.667)), h: 2 };
     case 'fact':
-      return { w: Math.max(4, Math.ceil(chars * 0.42)), h: 2 };
+      return { w: Math.max(4, Math.ceil(units * 0.7)), h: 2 };
     case 'food':
       return { w: 1, h: 1 };
   }

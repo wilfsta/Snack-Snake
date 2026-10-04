@@ -59,8 +59,17 @@ export function practiceWeight(rec: MasteryRecord, recentItemIds: readonly strin
   return (rec.state === 'MASTERED' ? 0.7 : 1) * struggle;
 }
 
+/** True once the learner has ever answered this item right first time (guided or not). */
+function hasFirstTrySuccess(rec: MasteryRecord): boolean {
+  return rec.consecutiveCorrect > 0 || /[GI]/.test(rec.recent);
+}
+
+/**
+ * An item needs introducing until it has been introduced, or the learner has shown they already
+ * know it. Getting a question right only after mistakes does not count as knowing it.
+ */
 export function needsIntroduction(rec: MasteryRecord): boolean {
-  return rec.introductions === 0 && rec.independentCorrect === 0 && rec.guidedCorrect === 0;
+  return rec.introductions === 0 && !hasFirstTrySuccess(rec);
 }
 
 /** Hint fades as the learner gets guided questions right. */
@@ -79,7 +88,9 @@ export function planStage(rec: MasteryRecord): StagePlan {
   if (rec.state === 'NEW' || rec.state === 'LEARNING') {
     const accuracy = recentAccuracy(rec);
     const struggling = accuracy !== null && rec.recent.length >= 2 && accuracy < 0.5;
-    if (rec.guidedCorrect < 2 || struggling) {
+    // Already recalled it unaided? Then no need for hinted practice (unless struggling).
+    const recalledAlone = rec.recent.includes('I');
+    if ((rec.guidedCorrect < 2 && !recalledAlone) || struggling) {
       return { stage: 'guided', hintStrength: guidedHintStrength(rec) };
     }
   }

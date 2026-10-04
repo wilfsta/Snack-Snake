@@ -4,8 +4,9 @@ import type { WallMode } from './Arena';
  * play    – answer questions, a wrong answer ends the game
  * learn   – guided learning, mistakes are safe
  * classic – the original Snake: eat food, grow, don't crash
+ * garden  – a world: endless, nothing can go badly wrong, the learning path runs underneath
  */
-export type GameModeId = 'play' | 'learn' | 'classic';
+export type GameModeId = 'play' | 'learn' | 'classic' | 'garden';
 
 /** Everything that differs between game modes lives here, not in scattered if-statements. */
 export interface ModeRules {
@@ -77,6 +78,7 @@ export function buildRules(mode: GameModeId, options: GameOptions = DEFAULT_OPTI
         speedUpPerCorrectMs: 2,
       };
     case 'learn':
+    case 'garden':
       // Learning stays gentle: a little slower, no speed-up, and walls bounce instead of killing.
       return {
         mode,

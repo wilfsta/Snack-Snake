@@ -81,11 +81,12 @@ export function drawTile(ctx: CanvasRenderingContext2D, layout: Layout, tile: Ti
   roundRectPath(ctx, -w / 2 + c * 0.12, -h / 2 + c * 0.1, w - c * 0.24, h * 0.38, radius * 0.7);
   ctx.fill();
 
-  // Label, shrunk to fit.
-  let size = Math.min(h * 0.56, c * 1.05);
+  // Label (one or two lines), shrunk to fit.
+  const lines = tile.label.split('\n');
+  let size = Math.min(h * (lines.length > 1 ? 0.4 : 0.56), c * 1.05);
   ctx.font = `700 ${size}px ${FONT_STACK}`;
   const maxW = w * 0.84;
-  const measured = ctx.measureText(tile.label).width;
+  const measured = Math.max(...lines.map((l) => ctx.measureText(l).width));
   if (measured > maxW) {
     size *= maxW / measured;
     ctx.font = `700 ${size}px ${FONT_STACK}`;
@@ -93,7 +94,7 @@ export function drawTile(ctx: CanvasRenderingContext2D, layout: Layout, tile: Ti
   ctx.fillStyle = style.text;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(tile.label, 0, size * 0.06);
+  lines.forEach((line, i) => ctx.fillText(line, 0, size * 0.06 + (i - (lines.length - 1) / 2) * size * 1.12));
 
   // Badges: a "?" on questions, a star on facts, ✓ / ✗ when revealing (shape, not just colour).
   const badgeR = c * 0.32;
