@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#3a5fd6" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Snack Snake</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%8D%3C/text%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="hud" hidden>
+        <div class="hud-side">
+          <div class="hud-chip unit" id="hud-unit">6×</div>
+          <div class="hud-chip" id="hud-score-box"><span aria-hidden="true">⭐</span><span class="sr-only">Score</span> <span id="hud-score">0</span></div>
+          <div class="hud-progress" id="hud-progress" hidden></div>
+        </div>
+        <div class="hud-center">
+          <div id="hud-question" class="hud-question" aria-live="polite"></div>
+        </div>
+        <div class="hud-side right">
+          <div class="hud-chip streak" id="hud-streak-box"><span aria-hidden="true">🔥</span><span class="sr-only">Streak</span> <span id="hud-streak">0</span></div>
+          <div class="hud-chip best" id="hud-best-box"><span aria-hidden="true">🏅</span><span class="sr-only">Best</span> <span id="hud-best">0</span></div>
+          <button id="hud-pause" class="icon-btn" type="button" aria-label="Pause">⏸</button>
+        </div>
+      </header>
+
+      <main id="stage">
+        <canvas id="game" aria-label="Snake game arena" role="img"></canvas>
+        <div id="teach" class="teach" hidden></div>
+        <div id="toast" class="toast" role="status" hidden></div>
+      </main>
+
+      <div id="touch-pad" class="touch-pad" aria-hidden="true">
+        <div class="pad-ring">
+          <span class="pad-btn up" data-dir="up">▲</span>
+          <span class="pad-btn left" data-dir="left">◀</span>
+          <span class="pad-btn right" data-dir="right">▶</span>
+          <span class="pad-btn down" data-dir="down">▼</span>
+        </div>
+      </div>
+
+      <div id="screens" hidden></div>
+      <div id="controller-indicator" class="controller-indicator" hidden><span aria-hidden="true">🎮</span><span class="ci-label">Controller connected</span></div>
+      <div id="live" class="sr-only" aria-live="polite"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
