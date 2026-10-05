@@ -8,16 +8,33 @@ export class ArenaRenderer {
   private cache: HTMLCanvasElement | null = null;
   private cacheKey = '';
 
-  draw(ctx: CanvasRenderingContext2D, width: number, height: number, layout: Layout, arena: Arena, dpr: number, themeId: ArenaThemeId = 'sky'): void {
-    const key = `${themeId}|${width}x${height}@${dpr}|${layout.cell},${layout.ox},${layout.oy},${arena.cols}x${arena.rows},${arena.walls}`;
+  draw(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    layout: Layout,
+    arena: Arena,
+    dpr: number,
+    themeId: ArenaThemeId = 'sky',
+    plants: readonly string[] = [],
+  ): void {
+    const key = `${themeId}|${width}x${height}@${dpr}|${layout.cell},${layout.ox},${layout.oy},${arena.cols}x${arena.rows},${arena.walls}|${plants.length}`;
     if (key !== this.cacheKey || !this.cache) {
-      this.cache = this.renderStatic(width, height, layout, arena, dpr, THEMES[themeId]);
+      this.cache = this.renderStatic(width, height, layout, arena, dpr, THEMES[themeId], plants);
       this.cacheKey = key;
     }
     ctx.drawImage(this.cache, 0, 0, width, height);
   }
 
-  private renderStatic(width: number, height: number, layout: Layout, arena: Arena, dpr: number, theme: ArenaTheme): HTMLCanvasElement {
+  private renderStatic(
+    width: number,
+    height: number,
+    layout: Layout,
+    arena: Arena,
+    dpr: number,
+    theme: ArenaTheme,
+    plants: readonly string[],
+  ): HTMLCanvasElement {
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(width * dpr));
     canvas.height = Math.max(1, Math.round(height * dpr));
@@ -62,7 +79,10 @@ export class ArenaRenderer {
     for (let y = 0; y < arena.rows; y++) {
       for (let x = y % 2; x < arena.cols; x += 2) ctx.fillRect(layout.ox + x * c, layout.oy + y * c, c, c);
     }
-    if (theme.decorations === 'flowers') this.drawFlowers(ctx, layout, arena);
+    if (theme.decorations === 'flowers') {
+      this.drawFlowers(ctx, layout, arena, plants.length);
+      this.drawGrownPlants(ctx, layout, arena, plants);
+    }
     ctx.restore();
 
     roundRectPath(ctx, layout.ox, layout.oy, w, h, r);
@@ -102,12 +122,37 @@ export class ArenaRenderer {
     });
   }
 
+  /**
+   * The child's grown plants, scattered faintly over the meadow. Kept pale and small so they
+   * read as scenery, never as something to eat.
+   */
+  private drawGrownPlants(ctx: CanvasRenderingContext2D, layout: Layout, arena: Arena, plants: readonly string[]): void {
+    if (plants.length === 0) return;
+    const rng = seededRng(arena.cols * 7 + arena.rows * 13);
+    const c = layout.cell;
+    ctx.save();
+    ctx.globalAlpha = 0.32;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `${c * 0.62}px sans-serif`;
+    const copies = Math.max(1, Math.round((arena.cols * arena.rows) / 60));
+    plants.forEach((plant) => {
+      for (let i = 0; i < copies; i++) {
+        const x = layout.ox + (Math.floor(rng.next() * arena.cols) + 0.5) * c;
+        const y = layout.oy + (Math.floor(rng.next() * arena.rows) + 0.5) * c;
+        ctx.fillText(plant, x, y);
+      }
+    });
+    ctx.restore();
+  }
+
   /** Little flowers at the corners of some cells: decoration only, deliberately small and soft. */
-  private drawFlowers(ctx: CanvasRenderingContext2D, layout: Layout, arena: Arena): void {
+  private drawFlowers(ctx: CanvasRenderingContext2D, layout: Layout, arena: Arena, grown: number): void {
     const rng = seededRng(arena.cols * 31 + arena.rows);
     const c = layout.cell;
     const petals = ['#ffb3c7', '#fff0a6', '#ffffff', '#d7c4ff'];
-    const count = Math.round(arena.cols * arena.rows * 0.06);
+    // The meadow gets more flowery as the child's garden grows.
+    const count = Math.round(arena.cols * arena.rows * (0.04 + Math.min(grown, 20) * 0.004));
     for (let i = 0; i < count; i++) {
       const x = layout.ox + Math.floor(rng.next() * arena.cols) * c + c * (0.2 + rng.next() * 0.6);
       const y = layout.oy + Math.floor(rng.next() * arena.rows) * c + c * (0.2 + rng.next() * 0.6);

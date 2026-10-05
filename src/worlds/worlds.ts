@@ -18,6 +18,8 @@ export interface WorldDefinition {
   readonly answerCount: number;
   /** Plain apples to eat before any numbers appear: lots on the first visit, a couple after. */
   readonly warmup: { readonly firstVisit: number; readonly laterVisits: number };
+  /** Questions and new things per visit, before the "look what grew!" reward screen. */
+  readonly visitLength: number;
 }
 
 /** Number Garden path: count to 10, then adding within 10 (+1s first, then +2s ...). */
@@ -46,6 +48,7 @@ export const NUMBER_GARDEN: WorldDefinition = {
   },
   answerCount: 3,
   warmup: { firstVisit: 6, laterVisits: 2 },
+  visitLength: 12,
 };
 
 export const WORLDS: readonly WorldDefinition[] = [NUMBER_GARDEN];

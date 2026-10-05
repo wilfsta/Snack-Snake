@@ -8,7 +8,10 @@ import type { LearnSession, PracticeSession, StateChange } from '../../learning/
 import { Effects } from '../../render/Effects';
 import type { GameRenderer } from '../../render/GameRenderer';
 import { SnakeAnimator } from '../../render/SnakeAnimator';
-import { DEFAULT_SKIN } from '../../render/skins';
+import { DEFAULT_SKIN, type SnakeSkin } from '../../render/skins';
+import { WARDROBE } from '../../rewards/catalog';
+import { STAR_RULES } from '../../rewards/economy';
+import type { RewardService } from '../services/RewardService';
 import type { UIManager } from '../../ui/UIManager';
 import { worldById, type WorldDefinition } from '../../worlds/worlds';
 import type { ProgressService } from '../services/ProgressService';
@@ -35,6 +38,8 @@ interface ActiveGame {
   newlyMastered: number;
   /** Questions answered correctly this visit (shown as stars in worlds). */
   stars: number;
+  /** Garden plants that grew during this visit. */
+  newPlants: number;
 }
 
 export interface FrameState {
@@ -50,7 +55,7 @@ export class GameController {
   private game: ActiveGame | null = null;
   private readonly animator = new SnakeAnimator();
   private readonly effects = new Effects();
-  private readonly skin = DEFAULT_SKIN;
+  private skin: SnakeSkin = DEFAULT_SKIN;
 
   constructor(
     private readonly nav: Navigator,
@@ -59,6 +64,7 @@ export class GameController {
     private readonly renderer: GameRenderer,
     private readonly settings: SettingsService,
     private readonly progress: ProgressService,
+    private readonly rewards: RewardService,
   ) {}
 
   get active(): boolean {
@@ -89,7 +95,7 @@ export class GameController {
     if (world) {
       const visitsBefore = this.progress.visitWorld(world.id);
       warmupFood = visitsBefore === 0 ? world.warmup.firstVisit : world.warmup.laterVisits;
-      source = engine.createLearnSession(world.path, Number.POSITIVE_INFINITY, {
+      source = engine.createLearnSession(world.path, world.visitLength, {
         onStateChange,
         answerCount: world.answerCount,
         probeNewItems: true,
@@ -109,7 +115,8 @@ export class GameController {
       rows,
       onEvent: (event) => this.onSessionEvent(event),
     });
-    this.game = { spec, session, source, world, newlyMastered: 0, stars: 0 };
+    this.game = { spec, session, source, world, newlyMastered: 0, stars: 0, newPlants: 0 };
+    this.skin = this.rewards.skin();
     this.animator.reset(directionAngle(session.snake.direction));
     this.effects.clear();
     session.start();
@@ -174,8 +181,11 @@ export class GameController {
     if (!game) return;
     this.progress.flush();
     this.audio.play('learnAchievement');
-    const unit = game.world ? game.world.path : game.spec.unitId;
-    const summary = this.progress.engine.summarizeUnit(unit);
+    if (game.world) {
+      this.showGardenVisit(game);
+      return;
+    }
+    const summary = this.progress.engine.summarizeUnit(game.spec.unitId);
     const learnUnit = game.spec.unitId;
     this.ui.showSessionComplete(
       {
@@ -187,8 +197,41 @@ export class GameController {
       },
       this.click(() => this.restart()),
       this.click(() => this.changeTable(game)),
-      this.click(() => (game.world ? this.nav.showMenu() : this.nav.startGame({ mode: 'play', unitId: learnUnit }))),
+      this.click(() => this.nav.startGame({ mode: 'play', unitId: learnUnit })),
     );
+  }
+
+  /** The "look what grew!" moment at the end of a garden visit. */
+  private showGardenVisit(game: ActiveGame): void {
+    const affordable = this.rewards.affordable();
+    this.ui.showGardenVisit(
+      {
+        starsThisVisit: game.stars,
+        balance: this.rewards.balance,
+        plants: this.rewards.gardenPlants(),
+        newCount: game.newPlants,
+        starsToNextPlant: this.rewards.starsToNextPlant(),
+        affordableIcons: affordable.map((id) => WARDROBE.find((w) => w.id === id)?.icon ?? '').filter(Boolean),
+      },
+      {
+        onContinue: this.click(() => this.restart()),
+        onWardrobe: this.click(() => this.nav.openWardrobe()),
+        onHome: this.click(() => this.nav.showMenu()),
+      },
+    );
+  }
+
+  /** Awards stars; in a world, celebrates anything that grew in the garden. */
+  private giveStars(game: ActiveGame, stars: number): void {
+    if (game.spec.mode === 'classic') return;
+    game.stars += stars;
+    const grew = this.rewards.award(stars, game.world !== null);
+    if (grew.length === 0 || !game.world) return;
+    game.newPlants += grew.length;
+    const head = game.session.snake.head;
+    this.effects.popText({ x: head.x + 0.5, y: head.y - 1.6 }, grew.join(' '), '#ffffff', 1.3, 2.2);
+    this.effects.burst({ x: head.x + 0.5, y: head.y + 0.5 }, 20, { shapes: ['star', 'dot'], colors: ['#ff9fc3', '#ffd54a', '#9be36d'] });
+    this.audio.play('streak');
   }
 
   /** "Change table" goes back to that subject's list; worlds and Classic go to the menu. */
@@ -221,6 +264,7 @@ export class GameController {
         this.audio.play('answersAppear');
         break;
       case 'factCollected': {
+        this.giveStars(game, STAR_RULES.newFactMet);
         this.animator.collectFact();
         this.animator.grow();
         this.effects.suck(event.tile, mouth);
@@ -231,7 +275,7 @@ export class GameController {
         break;
       }
       case 'correct': {
-        game.stars++;
+        this.giveStars(game, STAR_RULES.questionCompleted);
         this.animator.celebrate(event.streak);
         this.effects.burst(tileCenter(event.tile), event.streak >= 5 ? 30 : 18);
         const reward = game.spec.mode === 'play' ? `+${event.points}` : '⭐';
@@ -299,6 +343,7 @@ export class GameController {
     const game = this.game;
     if (!game || change.to !== 'MASTERED' || change.from === 'MASTERED') return;
     game.newlyMastered++;
+    if (game.spec.mode !== 'classic') this.giveStars(game, STAR_RULES.factMastered);
     if (game.spec.mode === 'play' || game.spec.mode === 'classic') return;
     // In worlds a mastered fact is a burst of stars, no words needed.
     this.ui.flash(game.world ? '⭐⭐⭐' : `⭐ ${this.progress.content.describeItem(change.itemId).full} – got it!`);
@@ -341,6 +386,7 @@ export class GameController {
       skin: this.skin,
       banner: this.readyBanner(session),
       theme: game.world?.theme ?? 'sky',
+      gardenPlants: game.world ? this.rewards.gardenPlants() : [],
     });
     if (session.phase.kind !== 'teach' && this.ui.teachingVisible) this.ui.hideTeaching();
 
@@ -348,7 +394,8 @@ export class GameController {
     this.ui.updateHud({
       mode,
       unitLabel: game.world ? game.world.icon : mode === 'classic' ? '🍎 Classic' : this.progress.engine.requireUnit(unitId).shortTitle,
-      score: game.world ? game.stars : session.score.score,
+      // Worlds show the child's whole star collection: a number that only ever goes up while playing.
+      score: game.world ? this.rewards.balance : session.score.score,
       streak: session.score.streak,
       best: Math.max(this.progress.bestScore(mode, unitId), session.score.score),
       question: this.hudQuestion(session),

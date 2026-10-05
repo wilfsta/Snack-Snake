@@ -12,7 +12,10 @@ import { UIManager } from '../ui/UIManager';
 import { BackdropController } from './controllers/BackdropController';
 import { GameController } from './controllers/GameController';
 import { MenuController } from './controllers/MenuController';
+import { NUMBER_GARDEN } from '../worlds/worlds';
+import { WardrobeController } from './controllers/WardrobeController';
 import { ProgressService } from './services/ProgressService';
+import { RewardService } from './services/RewardService';
 import { SettingsService } from './services/SettingsService';
 import type { GameSpec, Navigator } from './types';
 
@@ -28,17 +31,19 @@ type AppState =
   | 'PLAYING'
   | 'PAUSED'
   | 'SESSION_COMPLETE'
-  | 'GAME_OVER';
+  | 'GAME_OVER'
+  | 'WARDROBE';
 
 const TRANSITIONS: Readonly<Record<AppState, readonly AppState[]>> = {
-  MENU: ['SUBJECT_SELECT', 'OPTIONS', 'PLAYING'],
+  MENU: ['SUBJECT_SELECT', 'OPTIONS', 'PLAYING', 'WARDROBE'],
+  WARDROBE: ['MENU', 'PLAYING'],
   OPTIONS: ['MENU', 'PAUSED'],
   SUBJECT_SELECT: ['MENU', 'TABLE_SELECT'],
   TABLE_SELECT: ['SUBJECT_SELECT', 'MENU', 'PLAYING'],
   PLAYING: ['PAUSED', 'GAME_OVER', 'SESSION_COMPLETE', 'MENU'],
   PAUSED: ['PLAYING', 'MENU', 'OPTIONS'],
   GAME_OVER: ['PLAYING', 'TABLE_SELECT', 'MENU'],
-  SESSION_COMPLETE: ['PLAYING', 'TABLE_SELECT', 'MENU'],
+  SESSION_COMPLETE: ['PLAYING', 'TABLE_SELECT', 'MENU', 'WARDROBE'],
 };
 
 /**
@@ -55,7 +60,9 @@ export class App implements Navigator {
   private readonly loop: GameLoop;
   private readonly settings: SettingsService;
   private readonly progress: ProgressService;
+  private readonly rewards: RewardService;
   private readonly menus: MenuController;
+  private readonly wardrobe: WardrobeController;
   private readonly games: GameController;
   private readonly backdrop: BackdropController;
   /** Where "Done" in Options returns to. */
@@ -78,9 +85,11 @@ export class App implements Navigator {
 
     this.settings = new SettingsService(this.storage, this.audio, this.ui);
     this.progress = new ProgressService(this.storage);
-    this.menus = new MenuController(this, this.ui, this.audio, this.settings, this.progress);
-    this.games = new GameController(this, this.ui, this.audio, this.renderer, this.settings, this.progress);
-    this.backdrop = new BackdropController(this.renderer);
+    this.rewards = new RewardService(this.storage);
+    this.menus = new MenuController(this, this.ui, this.audio, this.settings, this.progress, this.rewards);
+    this.games = new GameController(this, this.ui, this.audio, this.renderer, this.settings, this.progress, this.rewards);
+    this.wardrobe = new WardrobeController(this, this.ui, this.audio, this.rewards);
+    this.backdrop = new BackdropController(this.renderer, () => this.rewards.skin());
 
     const pad = document.getElementById('touch-pad');
     const stage = document.getElementById('stage');
@@ -153,6 +162,16 @@ export class App implements Navigator {
     } else {
       this.showMenu();
     }
+  }
+
+  openWardrobe(): void {
+    this.games.stop();
+    this.goTo('WARDROBE');
+    this.wardrobe.show();
+  }
+
+  playWorld(): void {
+    this.startGame({ mode: 'garden', unitId: NUMBER_GARDEN.path.id, worldId: NUMBER_GARDEN.id });
   }
 
   startGame(spec: GameSpec): void {

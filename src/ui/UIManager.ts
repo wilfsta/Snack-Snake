@@ -14,11 +14,53 @@ export interface TableChoice {
 
 export interface MenuHandlers {
   readonly worldName: string;
+  readonly stars: number;
+  /** Something new can be bought: make the wardrobe button call for attention. */
+  readonly wardrobeHasNew: boolean;
   onWorld(): void;
+  onWardrobe(): void;
   onPlay(): void;
   onLearn(): void;
   onClassic(): void;
   onOptions(): void;
+}
+
+export interface GardenVisitView {
+  readonly starsThisVisit: number;
+  readonly balance: number;
+  /** Everything growing in the garden; the last `newCount` of them are new this visit. */
+  readonly plants: readonly string[];
+  readonly newCount: number;
+  readonly starsToNextPlant: number | null;
+  /** Icons of wardrobe items that can be bought right now. */
+  readonly affordableIcons: readonly string[];
+}
+
+export interface GardenVisitHandlers {
+  onContinue(): void;
+  onWardrobe(): void;
+  onHome(): void;
+}
+
+export type WardrobeItemState = 'equipped' | 'owned' | 'buyable' | 'locked';
+
+export interface WardrobeItemView {
+  readonly id: string;
+  readonly icon: string;
+  readonly name: string;
+  readonly price: number;
+  readonly state: WardrobeItemState;
+}
+
+export interface WardrobeView {
+  readonly balance: number;
+  readonly items: readonly WardrobeItemView[];
+}
+
+export interface WardrobeHandlers {
+  onItem(id: string): void;
+  onPlay(): void;
+  onBack(): void;
 }
 
 export interface SubjectChoice {
@@ -188,6 +230,18 @@ export class UIManager {
         el('span', { class: 'logo-b', text: 'Snake' }),
       ),
       world,
+      button(
+        el(
+          'span',
+          { class: 'wardrobe-card' },
+          el('span', { class: 'wardrobe-art', text: '🐍🎩', attrs: { 'aria-hidden': 'true' } }),
+          el('span', { class: 'star-count', text: `⭐ ${h.stars}` }),
+          h.wardrobeHasNew ? el('span', { class: 'new-badge', text: '!' }) : null,
+        ),
+        `wardrobe-btn${h.wardrobeHasNew ? ' has-new' : ''}`,
+        h.onWardrobe,
+        { 'aria-label': `Sid's wardrobe, ${h.stars} stars${h.wardrobeHasNew ? ', something new to get' : ''}` },
+      ),
       el(
         'div',
         { class: 'more-games', attrs: { role: 'group', 'aria-label': 'More games' } },
@@ -516,6 +570,128 @@ export class UIManager {
     this.fitScreen();
     const target = screen.querySelector<HTMLElement>('[data-autofocus]') ?? screen.querySelector<HTMLElement>('button');
     target?.focus({ preventScroll: true });
+  }
+
+  /** End of a garden visit: stars earned, the garden (new plants pop in), and Sid's shopping. No reading needed. */
+  showGardenVisit(view: GardenVisitView, h: GardenVisitHandlers): void {
+    const garden = el('div', { class: 'garden-plot', attrs: { role: 'img', 'aria-label': `Your garden has ${view.plants.length} things growing` } });
+    const firstNew = view.plants.length - view.newCount;
+    view.plants.forEach((plant, i) => {
+      const p = el('span', { class: `plant${i >= firstNew ? ' new' : ''}`, text: plant });
+      if (i >= firstNew) p.style.animationDelay = `${600 + (i - firstNew) * 450}ms`;
+      garden.append(p);
+    });
+    if (view.starsToNextPlant !== null) {
+      garden.append(
+        el('span', { class: 'plant next', attrs: { title: 'Next' } }, el('span', { class: 'next-mark', text: '?' }), el('span', { class: 'next-cost', text: `⭐${view.starsToNextPlant}` })),
+      );
+    }
+    if (view.plants.length === 0 && view.starsToNextPlant === null) garden.append(el('span', { class: 'plant', text: '🌱' }));
+
+    const shop = button(
+      el(
+        'span',
+        { class: 'wardrobe-card' },
+        el('span', { class: 'wardrobe-art', text: '🐍🎩', attrs: { 'aria-hidden': 'true' } }),
+        view.affordableIcons.length > 0
+          ? el('span', { class: 'can-buy', text: view.affordableIcons.slice(0, 3).join(' ') })
+          : el('span', { class: 'star-count', text: `⭐ ${view.balance}` }),
+      ),
+      `wardrobe-btn${view.affordableIcons.length > 0 ? ' has-new' : ''}`,
+      h.onWardrobe,
+      { 'aria-label': "Sid's wardrobe" },
+    );
+
+    const screen = el(
+      'div',
+      { class: 'screen overlay-screen' },
+      el(
+        'div',
+        { class: 'card wide-card garden-card' },
+        el('div', { class: 'big-stars', text: `⭐ +${view.starsThisVisit}`, attrs: { 'aria-label': `${view.starsThisVisit} stars this time` } }),
+        garden,
+        view.newCount > 0 ? el('div', { class: 'new-best', text: '🌱 ✨' }) : null,
+        shop,
+        el(
+          'div',
+          { class: 'row-buttons' },
+          button('▶', 'big-btn primary play-big', h.onContinue, { 'data-autofocus': '', 'aria-label': 'Keep playing' }),
+          button('⌂', 'big-btn', h.onHome, { 'aria-label': 'Home' }),
+        ),
+      ),
+    );
+    this.show(screen, h.onHome);
+    this.announce(`${view.starsThisVisit} stars! ${view.newCount > 0 ? 'Something new grew in your garden.' : ''}`);
+  }
+
+  private wardrobeButtons = new Map<string, HTMLButtonElement>();
+  private wardrobeBalance: HTMLElement | null = null;
+
+  /** Sid's wardrobe. Returns the canvas for the live preview of Sid. */
+  showWardrobe(view: WardrobeView, h: WardrobeHandlers): HTMLCanvasElement {
+    const preview = el('canvas', { class: 'sid-preview', attrs: { 'aria-label': 'Sid wearing the chosen outfit', role: 'img' } });
+    this.wardrobeBalance = el('div', { class: 'big-stars', text: `⭐ ${view.balance}` });
+    this.wardrobeButtons.clear();
+    const grid = el('div', { class: 'wardrobe-grid' });
+    view.items.forEach((item, i) => {
+      const b = button(el('span', {}), 'wear-btn', () => h.onItem(item.id));
+      if (i === 0) b.setAttribute('data-autofocus', '');
+      this.wardrobeButtons.set(item.id, b);
+      grid.append(b);
+    });
+    const screen = el(
+      'div',
+      { class: 'screen overlay-screen' },
+      el(
+        'div',
+        { class: 'card wide-card wardrobe-card-screen' },
+        el('div', { class: 'wardrobe-top' }, preview, this.wardrobeBalance),
+        grid,
+        el(
+          'div',
+          { class: 'row-buttons' },
+          button('▶', 'big-btn primary play-big', h.onPlay, { 'aria-label': 'Play in the garden' }),
+          button('⌂', 'big-btn', h.onBack, { 'aria-label': 'Home' }),
+        ),
+      ),
+    );
+    this.updateWardrobe(view);
+    this.show(screen, h.onBack);
+    return preview;
+  }
+
+  updateWardrobe(view: WardrobeView): void {
+    if (this.wardrobeBalance) this.wardrobeBalance.textContent = `⭐ ${view.balance}`;
+    for (const item of view.items) {
+      const b = this.wardrobeButtons.get(item.id);
+      if (!b) continue;
+      b.className = `wear-btn ${item.state}`;
+      const status =
+        item.state === 'equipped' ? '✓' : item.state === 'owned' ? '' : item.price === 0 ? '' : `⭐${item.price}`;
+      const parts: Node[] = [
+        el('span', { class: 'wear-icon', text: item.icon, attrs: { 'aria-hidden': 'true' } }),
+        el('span', { class: 'wear-status', text: status }),
+      ];
+      if (item.state === 'locked') parts.push(el('span', { class: 'wear-lock', text: '🔒', attrs: { 'aria-hidden': 'true' } }));
+      b.replaceChildren(...parts);
+      const label = {
+        equipped: `${item.name}, wearing`,
+        owned: `${item.name}, put on`,
+        buyable: `${item.name}, get for ${item.price} stars`,
+        locked: `${item.name}, needs ${item.price} stars`,
+      }[item.state];
+      b.setAttribute('aria-label', label);
+      b.setAttribute('aria-pressed', String(item.state === 'equipped'));
+    }
+  }
+
+  /** Little "not yet" wiggle on a wardrobe item. */
+  shakeWardrobeItem(id: string): void {
+    const b = this.wardrobeButtons.get(id);
+    if (!b) return;
+    b.classList.remove('shake');
+    void b.offsetWidth;
+    b.classList.add('shake');
   }
 
   private stat(label: string, value: string): HTMLElement {

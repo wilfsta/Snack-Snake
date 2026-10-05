@@ -51,6 +51,8 @@ export interface SaveData {
   bestStreaks: Record<string, number>;
   /** Times each world has been entered. */
   worldVisits: Record<string, number>;
+  /** Opaque to storage; the rewards module validates its own state (stars, wardrobe). */
+  rewards: unknown;
   /** Opaque to storage; the learning module validates its own snapshot. */
   learning: unknown;
 }
@@ -73,6 +75,7 @@ export function defaultSaveData(): SaveData {
     highScores: {},
     bestStreaks: {},
     worldVisits: {},
+    rewards: null,
     learning: null,
   };
 }
@@ -114,6 +117,7 @@ export function parseSaveData(json: string | null): SaveData {
   data.highScores = numberRecord(src.highScores);
   data.bestStreaks = numberRecord(src.bestStreaks);
   data.worldVisits = numberRecord(src.worldVisits);
+  data.rewards = src.rewards ?? null;
   data.learning = src.learning ?? null;
   return data;
 }

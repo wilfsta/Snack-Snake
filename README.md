@@ -1,6 +1,6 @@
 # Snack Snake
 
-A funny Snake game where you gobble the right answers. Start in the **Number Garden** (ages 5+: counting, then adding within 10 – no reading needed, nothing can go wrong), or pick times tables, adding, taking away or dividing, or Classic (original rules).
+A funny Snake game where you gobble the right answers. Start in the **Number Garden** (ages 5+: counting, then adding within 10 – no reading needed, nothing can go wrong; earn ⭐ stars to grow your garden and dress Sid in hats, glasses and patterns), or pick times tables, adding, taking away or dividing, or Classic (original rules).
 
 **Options** (main menu or pause): snake speed, wrap-around vs deadly walls, and how many answers appear (2–6, fewer = easier).
 
@@ -30,7 +30,8 @@ Menus are navigable with arrows/D-pad. Press a controller button once if the bro
 ```
 src/
   app/        App = router + top-level state machine. controllers/ (Menu, Game, Backdrop) and services/ (Settings, Progress)
-  worlds/     World definitions (Number Garden): theme + a learning path across subjects + warm-up
+  worlds/     World definitions (Number Garden): theme + a learning path across subjects + warm-up + visit length
+  rewards/    Stars (earned for effort and progress, never taken away), garden plants, Sid's wardrobe catalogue
   game/       Grid-authoritative Snake: SnakeSession (in-game phase machine), Snake, Arena, collision, spawner, scoring, modes
   learning/   Subject-agnostic: Challenge/ChallengeSource interfaces, LearningEngine (adaptive selection), LearningTracker, mastery rules
   content/    Educational content plug-ins. arithmetic/ = ×, +, −, ÷ operations (facts introduced in order 1..12); ContentLibrary routes between subjects

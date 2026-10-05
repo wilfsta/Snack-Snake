@@ -5,7 +5,7 @@ import { DemoWorld } from '../../game/DemoWorld';
 import { Effects } from '../../render/Effects';
 import type { GameRenderer } from '../../render/GameRenderer';
 import { SnakeAnimator } from '../../render/SnakeAnimator';
-import { DEFAULT_SKIN } from '../../render/skins';
+import { DEFAULT_SKIN, type SnakeSkin } from '../../render/skins';
 import { nearestTileOffset, tileCenter } from './worldGeometry';
 
 /** The self-driving snake behind the menus, so the game feels alive from the first second. */
@@ -15,7 +15,11 @@ export class BackdropController {
   private animator = new SnakeAnimator();
   private readonly effects = new Effects();
 
-  constructor(private readonly renderer: GameRenderer) {}
+  constructor(
+    private readonly renderer: GameRenderer,
+    /** Sid's current outfit, so the menu shows off what the child has unlocked. */
+    private readonly skin: () => SnakeSkin = () => DEFAULT_SKIN,
+  ) {}
 
   update(dtMs: number): void {
     const demo = this.demo;
@@ -37,7 +41,7 @@ export class BackdropController {
 
   render(): void {
     this.ensureDemo();
-    if (this.demo) this.renderer.render({ world: this.demo, animator: this.animator, effects: this.effects, skin: DEFAULT_SKIN });
+    if (this.demo) this.renderer.render({ world: this.demo, animator: this.animator, effects: this.effects, skin: this.skin() });
   }
 
   /** Rebuilds the demo when the screen shape changes a lot (e.g. phone rotated). */

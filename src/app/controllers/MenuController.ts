@@ -5,6 +5,7 @@ import { MAX_ANSWERS, MIN_ANSWERS, SPEED_LEVELS, type GameModeId } from '../../g
 import type { TableChoice, UIManager } from '../../ui/UIManager';
 import { NUMBER_GARDEN } from '../../worlds/worlds';
 import type { ProgressService } from '../services/ProgressService';
+import type { RewardService } from '../services/RewardService';
 import type { SettingsService } from '../services/SettingsService';
 import { withClick, type Navigator } from '../types';
 
@@ -27,6 +28,7 @@ export class MenuController {
     private readonly audio: AudioManager,
     private readonly settings: SettingsService,
     private readonly progress: ProgressService,
+    private readonly rewards: RewardService,
   ) {}
 
   private click(action: () => void): () => void {
@@ -36,7 +38,10 @@ export class MenuController {
   showMenu(): void {
     this.ui.showMenu({
       worldName: NUMBER_GARDEN.name,
-      onWorld: this.click(() => this.nav.startGame({ mode: 'garden', unitId: NUMBER_GARDEN.path.id, worldId: NUMBER_GARDEN.id })),
+      stars: this.rewards.balance,
+      wardrobeHasNew: this.rewards.affordable().length > 0,
+      onWorld: this.click(() => this.nav.playWorld()),
+      onWardrobe: this.click(() => this.nav.openWardrobe()),
       onPlay: this.click(() => this.nav.openSubjectSelect('play')),
       onLearn: this.click(() => this.nav.openSubjectSelect('learn')),
       onClassic: this.click(() => this.nav.startGame({ mode: 'classic', unitId: CLASSIC_UNIT })),

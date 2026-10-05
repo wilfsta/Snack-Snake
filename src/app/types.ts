@@ -21,6 +21,9 @@ export interface Navigator {
   openTableSelect(mode: GameModeId, subjectId: string): void;
   openOptions(): void;
   closeOptions(): void;
+  openWardrobe(): void;
+  /** Straight into the Number Garden. */
+  playWorld(): void;
   startGame(spec: GameSpec): void;
   pause(): void;
   resume(): void;

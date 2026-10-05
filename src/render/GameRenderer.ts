@@ -17,6 +17,8 @@ export interface SceneOptions {
   /** Large centred caption, e.g. "Ready?" / "Go!". */
   readonly banner?: { readonly text: string; readonly age: number } | null;
   readonly theme?: ArenaThemeId;
+  /** Plants the child has grown; drawn softly on the board in worlds that grow. */
+  readonly gardenPlants?: readonly string[];
 }
 
 /** Owns the canvas: sizing for any screen and device pixel ratio, and drawing a frame. */
@@ -65,7 +67,7 @@ export class GameRenderer {
     const layout = this.layoutFor(world.arena.cols, world.arena.rows);
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.width, this.height);
-    this.arenaRenderer.draw(ctx, this.width, this.height, layout, world.arena, this.dpr, scene.theme);
+    this.arenaRenderer.draw(ctx, this.width, this.height, layout, world.arena, this.dpr, scene.theme, scene.gardenPlants ?? []);
 
     const time = world.time;
     for (const tile of world.tiles) drawHint(ctx, layout, tile, time);

@@ -133,13 +133,20 @@ export class SnakeRenderer {
     circles((p) => p.r * c);
     ctx.fill();
 
-    if (skin.pattern.kind !== 'none') {
-      ctx.fillStyle = skin.pattern.color;
-      if (skin.pattern.kind === 'spots') {
-        circles((p) => p.r * c * 0.42, 0, 0, skin.pattern.every, 2);
-      } else {
-        circles((p) => p.r * c * 0.92, 0, 0, skin.pattern.every, 0);
+    const pattern = skin.pattern;
+    if (pattern.kind === 'rainbow') {
+      // Each slice of body gets the next colour of the rainbow.
+      for (let i = pts.length - 1; i >= 1; i--) {
+        const p = pts[i];
+        ctx.fillStyle = `hsl(${(i * 9) % 360}, 90%, 62%)`;
+        ctx.beginPath();
+        ctx.arc(px(p), py(p), p.r * c, 0, Math.PI * 2);
+        ctx.fill();
       }
+    } else if (pattern.kind !== 'none') {
+      ctx.fillStyle = pattern.color;
+      if (pattern.kind === 'spots') circles((p) => p.r * c * 0.42, 0, 0, pattern.every, 2);
+      else circles((p) => p.r * c * 0.92, 0, 0, pattern.every, 0);
       ctx.fill();
     }
 
@@ -222,11 +229,39 @@ export class SnakeRenderer {
     this.drawEyes(ctx, R, hh, angle, f, skin, outline, anim.time);
 
     for (const accessory of skin.accessories) {
+      if (!accessory.draw) continue;
       ctx.save();
       accessory.draw(ctx, { radius: R, face: f, time: anim.time });
       ctx.restore();
     }
     ctx.restore();
+
+    // Hats stay upright on top of the head whichever way Sid is facing.
+    for (const accessory of skin.accessories) {
+      if (!accessory.drawUpright) continue;
+      ctx.save();
+      accessory.drawUpright(ctx, { x, y, radius: R, face: f, time: anim.time });
+      ctx.restore();
+    }
+  }
+
+  /** Speech bubble and stars for a portrait drawn outside the arena (e.g. the wardrobe preview). */
+  drawStandaloneOverlays(ctx: CanvasRenderingContext2D, hx: number, hy: number, cell: number, width: number, anim: SnakeAnimator): void {
+    this.drawHeadOverlays(ctx, { cell, ox: 0, oy: 0, cols: width / cell, rows: 100 }, hx, hy, anim);
+  }
+
+  /** A posed Sid facing right, for menus such as the wardrobe preview. `cell` sets the size. */
+  drawPortrait(ctx: CanvasRenderingContext2D, cx: number, cy: number, cell: number, anim: SnakeAnimator, skin: SnakeSkin): void {
+    const n = 26;
+    const pts: BodyPoint[] = [];
+    for (let i = 0; i < n; i++) {
+      const d = i * 0.2;
+      const wave = Math.sin(d * 1.4 - anim.time * 2.5) * 0.45 * Math.min(1, d / 2);
+      pts.push({ x: -d, y: wave, r: lerp(0.36, 0.18, i / n) * skin.bodyScale });
+    }
+    const layout: Layout = { cell, ox: cx, oy: cy, cols: 0, rows: 0 };
+    this.drawBody(ctx, layout, pts, { x: 0, y: 0 }, skin);
+    this.drawHead(ctx, cx, cy, cell, anim, skin);
   }
 
   private drawMouth(
