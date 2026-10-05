@@ -20,7 +20,12 @@ export class RewardService {
   private current: RewardState;
 
   constructor(private readonly storage: StorageManager) {
-    this.current = sanitizeRewardState(storage.data.rewards);
+    this.current = sanitizeRewardState(storage.profile.rewards);
+  }
+
+  /** Loads the active player's stars and wardrobe (after switching player). */
+  reload(): void {
+    this.current = sanitizeRewardState(this.storage.profile.rewards);
   }
 
   get state(): RewardState {
@@ -80,6 +85,6 @@ export class RewardService {
 
   private set(state: RewardState, immediate = false): void {
     this.current = state;
-    this.storage.update((d) => (d.rewards = state), immediate);
+    this.storage.updateProfile((p) => (p.rewards = state), immediate);
   }
 }

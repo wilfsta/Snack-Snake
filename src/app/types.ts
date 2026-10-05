@@ -22,6 +22,12 @@ export interface Navigator {
   openOptions(): void;
   closeOptions(): void;
   openWardrobe(): void;
+  /** "Who's playing?" */
+  openProfiles(): void;
+  /** Makes a player active, loads their progress and goes to the menu. */
+  switchPlayer(id: string): void;
+  /** Reloads the active player's progress (e.g. after the active player was deleted). */
+  reloadPlayer(): void;
   /** Straight into the Number Garden. */
   playWorld(): void;
   startGame(spec: GameSpec): void;

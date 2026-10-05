@@ -12,6 +12,11 @@ const KEY_DIRECTIONS: Readonly<Record<string, Direction>> = {
   KeyD: 'right',
 };
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (target instanceof HTMLTextAreaElement) return true;
+  return target instanceof HTMLInputElement && target.type !== 'range' && target.type !== 'button';
+}
+
 function buttonHasFocus(): boolean {
   const el = document.activeElement;
   return el instanceof HTMLButtonElement || el instanceof HTMLAnchorElement;
@@ -31,6 +36,8 @@ export class KeyboardInput {
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Typing a name: let every key through to the text box (Escape still backs out).
+    if (isTypingTarget(e.target) && e.code !== 'Escape') return;
     const direction = KEY_DIRECTIONS[e.code];
     if (direction) {
       e.preventDefault();

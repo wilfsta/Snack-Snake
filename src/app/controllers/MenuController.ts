@@ -5,6 +5,7 @@ import { MAX_ANSWERS, MIN_ANSWERS, SPEED_LEVELS, type GameModeId } from '../../g
 import type { TableChoice, UIManager } from '../../ui/UIManager';
 import { NUMBER_GARDEN } from '../../worlds/worlds';
 import type { ProgressService } from '../services/ProgressService';
+import type { ProfileService } from '../services/ProfileService';
 import type { RewardService } from '../services/RewardService';
 import type { SettingsService } from '../services/SettingsService';
 import { withClick, type Navigator } from '../types';
@@ -29,6 +30,7 @@ export class MenuController {
     private readonly settings: SettingsService,
     private readonly progress: ProgressService,
     private readonly rewards: RewardService,
+    private readonly profiles: ProfileService,
   ) {}
 
   private click(action: () => void): () => void {
@@ -36,8 +38,11 @@ export class MenuController {
   }
 
   showMenu(): void {
+    const player = this.profiles.get(this.profiles.activeId);
     this.ui.showMenu({
       worldName: NUMBER_GARDEN.name,
+      player: { name: player?.name ?? 'Player', avatar: player?.avatar ?? '🦊' },
+      onPlayer: this.click(() => this.nav.openProfiles()),
       stars: this.rewards.balance,
       wardrobeHasNew: this.rewards.affordable().length > 0,
       onWorld: this.click(() => this.nav.playWorld()),

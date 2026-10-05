@@ -2,6 +2,8 @@
 
 A funny Snake game where you gobble the right answers. Start in the **Number Garden** (ages 5+: counting, then adding within 10 – no reading needed, nothing can go wrong; earn ⭐ stars to grow your garden and dress Sid in hats, glasses and patterns), or pick times tables, adding, taking away or dividing, or Classic (original rules).
 
+**Players**: up to 6 children can each have their own Sid, stars, garden, learning progress and options (tap the player chip on the menu). Saves from before profiles become Player 1.
+
 **Options** (main menu or pause): snake speed, wrap-around vs deadly walls, and how many answers appear (2–6, fewer = easier).
 
 ## Run it

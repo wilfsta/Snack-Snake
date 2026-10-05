@@ -14,6 +14,9 @@ export interface TableChoice {
 
 export interface MenuHandlers {
   readonly worldName: string;
+  /** The player whose turn it is. */
+  readonly player: { readonly name: string; readonly avatar: string };
+  onPlayer(): void;
   readonly stars: number;
   /** Something new can be bought: make the wardrobe button call for attention. */
   readonly wardrobeHasNew: boolean;
@@ -23,6 +26,45 @@ export interface MenuHandlers {
   onLearn(): void;
   onClassic(): void;
   onOptions(): void;
+}
+
+export interface PlayerCardView {
+  readonly id: string;
+  readonly name: string;
+  readonly avatar: string;
+  readonly stars: number;
+  readonly active: boolean;
+}
+
+export interface ProfilePickerHandlers {
+  onPick(id: string): void;
+  onAdd(): void;
+  onEdit(id: string): void;
+  onBack(): void;
+}
+
+export interface ProfileEditorView {
+  readonly title: string;
+  readonly name: string;
+  readonly avatar: string;
+  readonly avatars: readonly string[];
+  readonly maxNameLength: number;
+  /** Shown only when editing an existing player who is not the last one. */
+  readonly canDelete: boolean;
+}
+
+export interface ProfileEditorHandlers {
+  onSave(name: string, avatar: string): void;
+  onDelete(): void;
+  onCancel(): void;
+}
+
+export interface ConfirmView {
+  readonly icon: string;
+  readonly title: string;
+  readonly message: string;
+  readonly confirmLabel: string;
+  readonly cancelLabel: string;
 }
 
 export interface GardenVisitView {
@@ -220,9 +262,21 @@ export class UIManager {
       h.onWorld,
       { 'data-autofocus': '', 'aria-label': `Play ${h.worldName}` },
     );
+    const player = button(
+      el(
+        'span',
+        { class: 'player-chip' },
+        el('span', { class: 'player-avatar', text: h.player.avatar, attrs: { 'aria-hidden': 'true' } }),
+        el('span', { class: 'player-name', text: h.player.name }),
+      ),
+      'player-btn',
+      h.onPlayer,
+      { 'aria-label': `Playing as ${h.player.name}. Change player` },
+    );
     const screen = el(
       'div',
       { class: 'screen menu-screen' },
+      player,
       el(
         'h1',
         { class: 'logo', attrs: { 'aria-label': 'Snack Snake' } },
@@ -570,6 +624,138 @@ export class UIManager {
     this.fitScreen();
     const target = screen.querySelector<HTMLElement>('[data-autofocus]') ?? screen.querySelector<HTMLElement>('button');
     target?.focus({ preventScroll: true });
+  }
+
+  /**
+   * "Who's playing?" – big animal pictures so each child can find themselves without reading.
+   * Editing is a small pencil on each card, aimed at grown-ups.
+   */
+  showProfilePicker(players: readonly PlayerCardView[], canAdd: boolean, h: ProfilePickerHandlers, allowBack: boolean): void {
+    const grid = el('div', { class: 'player-grid' });
+    for (const p of players) {
+      const card = el('div', { class: `player-card${p.active ? ' active' : ''}` });
+      const pick = button(
+        el(
+          'span',
+          { class: 'player-card-inner' },
+          el('span', { class: 'player-card-avatar', text: p.avatar, attrs: { 'aria-hidden': 'true' } }),
+          el('span', { class: 'player-card-name', text: p.name }),
+          el('span', { class: 'player-card-stars', text: `⭐ ${p.stars}` }),
+        ),
+        'player-pick',
+        () => h.onPick(p.id),
+        { 'aria-label': `${p.name}, ${p.stars} stars`, ...(p.active ? { 'data-autofocus': '' } : {}) },
+      );
+      const edit = button('✏️', 'player-edit', () => h.onEdit(p.id), { 'aria-label': `Change ${p.name}` });
+      card.append(pick, edit);
+      grid.append(card);
+    }
+    if (canAdd) {
+      grid.append(
+        el(
+          'div',
+          { class: 'player-card add' },
+          button(
+            el('span', { class: 'player-card-inner' }, el('span', { class: 'player-card-avatar', text: '＋' }), el('span', { class: 'player-card-name', text: 'New player' })),
+            'player-pick',
+            h.onAdd,
+            { 'aria-label': 'Add a new player' },
+          ),
+        ),
+      );
+    }
+    const screen = el(
+      'div',
+      { class: 'screen table-screen' },
+      el(
+        'div',
+        { class: 'screen-header' },
+        allowBack ? button('◀ Back', 'back-btn', h.onBack, { 'aria-label': 'Back' }) : el('span', {}),
+        el('h2', { text: "Who's playing? 👋" }),
+      ),
+      grid,
+    );
+    this.show(screen, allowBack ? h.onBack : null);
+  }
+
+  showProfileEditor(view: ProfileEditorView, h: ProfileEditorHandlers): void {
+    let avatar = view.avatar;
+    const preview = el('div', { class: 'editor-avatar', text: avatar, attrs: { 'aria-hidden': 'true' } });
+    const nameInput = el('input', {
+      class: 'name-input',
+      attrs: {
+        type: 'text',
+        value: view.name,
+        maxlength: String(view.maxNameLength),
+        placeholder: 'Name (optional)',
+        'aria-label': 'Name',
+        autocomplete: 'off',
+        spellcheck: 'false',
+      },
+    });
+    const picks = el('div', { class: 'avatar-grid', attrs: { role: 'group', 'aria-label': 'Choose a picture' } });
+    const buttons: HTMLButtonElement[] = [];
+    for (const a of view.avatars) {
+      const b = button(a, `avatar-btn${a === avatar ? ' chosen' : ''}`, () => {
+        avatar = a;
+        preview.textContent = a;
+        for (const other of buttons) {
+          other.classList.toggle('chosen', other === b);
+          other.setAttribute('aria-pressed', String(other === b));
+        }
+      }, { 'aria-pressed': String(a === avatar), 'aria-label': `Picture ${a}` });
+      if (a === avatar) b.setAttribute('data-autofocus', '');
+      buttons.push(b);
+      picks.append(b);
+    }
+    const save = () => h.onSave(nameInput.value, avatar);
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        save();
+      }
+    });
+    const screen = el(
+      'div',
+      { class: 'screen overlay-screen' },
+      el(
+        'div',
+        { class: 'card wide-card' },
+        el('h2', { text: view.title }),
+        el('div', { class: 'editor-top' }, preview, nameInput),
+        picks,
+        el(
+          'div',
+          { class: 'row-buttons' },
+          button('✓ Save', 'big-btn primary', save),
+          button('✕ Cancel', 'big-btn', h.onCancel),
+        ),
+        view.canDelete ? button('🗑 Delete player', 'small-btn danger', h.onDelete) : null,
+      ),
+    );
+    this.show(screen, h.onCancel);
+  }
+
+  /** A grown-up style "are you sure?" – the safe choice is focused first. */
+  showConfirm(view: ConfirmView, onConfirm: () => void, onCancel: () => void): void {
+    const screen = el(
+      'div',
+      { class: 'screen overlay-screen' },
+      el(
+        'div',
+        { class: 'card' },
+        el('div', { class: 'confirm-icon', text: view.icon, attrs: { 'aria-hidden': 'true' } }),
+        el('h2', { text: view.title }),
+        el('p', { class: 'muted', text: view.message }),
+        el(
+          'div',
+          { class: 'row-buttons' },
+          button(view.cancelLabel, 'big-btn primary', onCancel, { 'data-autofocus': '' }),
+          button(view.confirmLabel, 'big-btn danger', onConfirm),
+        ),
+      ),
+    );
+    this.show(screen, onCancel);
   }
 
   /** End of a garden visit: stars earned, the garden (new plants pop in), and Sid's shopping. No reading needed. */

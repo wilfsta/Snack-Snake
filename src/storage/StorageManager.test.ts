@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ProfileService } from '../app/services/ProfileService';
+import { ProgressService } from '../app/services/ProgressService';
+import { RewardService } from '../app/services/RewardService';
 import { LearningTracker } from '../learning/LearningTracker';
 import { MemoryStore, parseSaveData, SAVE_KEY, StorageManager } from './StorageManager';
 
@@ -6,18 +9,18 @@ describe('StorageManager', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('round-trips settings, high scores and learning progress', () => {
+  it('round-trips device settings and the active player\'s data', () => {
     const store = new MemoryStore();
     const tracker = new LearningTracker();
     tracker.markIntroduced('mul:6x4');
     tracker.recordAttempt('mul:6x4', { kind: 'independent', correct: true, firstTry: true, hintStrength: 0 });
 
     const first = new StorageManager(store);
-    first.update((d) => {
-      d.settings.muted = true;
-      d.settings.lastLearnUnit = 'mul:table:6';
-      d.highScores['play:mul:table:6'] = 120;
-      d.learning = tracker.snapshot();
+    first.update((d) => (d.device.muted = true));
+    first.updateProfile((p) => {
+      p.settings.lastLearnUnit = 'mul:table:6';
+      p.highScores['play:mul:table:6'] = 120;
+      p.learning = tracker.snapshot();
     });
     // Debounced: nothing written yet, then flushed after the delay.
     expect(store.getItem(SAVE_KEY)).toBeNull();
@@ -25,27 +28,123 @@ describe('StorageManager', () => {
     expect(store.getItem(SAVE_KEY)).not.toBeNull();
 
     const reloaded = new StorageManager(store);
-    expect(reloaded.data.settings.muted).toBe(true);
-    expect(reloaded.data.settings.lastLearnUnit).toBe('mul:table:6');
-    expect(reloaded.data.highScores['play:mul:table:6']).toBe(120);
-    const restored = new LearningTracker(reloaded.data.learning);
-    expect(restored.get('mul:6x4')).toEqual(tracker.get('mul:6x4'));
+    expect(reloaded.data.device.muted).toBe(true);
+    expect(reloaded.profile.settings.lastLearnUnit).toBe('mul:table:6');
+    expect(reloaded.profile.highScores['play:mul:table:6']).toBe(120);
+    expect(new LearningTracker(reloaded.profile.learning).get('mul:6x4')).toEqual(tracker.get('mul:6x4'));
   });
 
   it('flush writes immediately', () => {
     const store = new MemoryStore();
     const storage = new StorageManager(store);
-    storage.update((d) => (d.highScores.x = 5), true);
-    expect(JSON.parse(store.getItem(SAVE_KEY)!).highScores.x).toBe(5);
+    storage.updateProfile((p) => (p.highScores.x = 5), true);
+    expect(JSON.parse(store.getItem(SAVE_KEY)!).profiles[0].highScores.x).toBe(5);
+  });
+
+  it('moves a save from before profiles into the first player, losing nothing', () => {
+    const v1 = {
+      version: 1,
+      settings: { muted: true, touchControls: 'on', lastLearnUnit: 'mul:table:7', speed: 1, walls: 'solid', answerCount: 3 },
+      highScores: { 'play:mul:table:6': 90 },
+      bestStreaks: { 'play:mul:table:6': 4 },
+      worldVisits: { garden: 2 },
+      rewards: { starsEarned: 12, starsSpent: 5, gardenStars: 12, owned: ['skin:classic', 'hat:cap'] },
+      learning: { version: 1, step: 3, records: {}, units: {} },
+    };
+    const data = parseSaveData(JSON.stringify(v1));
+    expect(data.version).toBe(2);
+    expect(data.device).toEqual({ muted: true, touchControls: 'on' });
+    expect(data.profiles).toHaveLength(1);
+    const p = data.profiles[0];
+    expect(data.activeProfileId).toBe(p.id);
+    expect(p.settings).toMatchObject({ lastLearnUnit: 'mul:table:7', speed: 1, walls: 'solid', answerCount: 3 });
+    expect(p.highScores).toEqual({ 'play:mul:table:6': 90 });
+    expect(p.worldVisits).toEqual({ garden: 2 });
+    expect(p.rewards).toEqual(v1.rewards);
+    expect(p.learning).toEqual(v1.learning);
   });
 
   it('survives corrupt or foreign data', () => {
-    expect(parseSaveData('{not json').settings.muted).toBe(false);
-    expect(parseSaveData(JSON.stringify({ version: 99 })).highScores).toEqual({});
-    const odd = parseSaveData(JSON.stringify({ version: 1, settings: { muted: 'yes', touchControls: 'sideways' }, highScores: { a: -5, b: 10, c: 'x' } }));
-    expect(odd.settings.muted).toBe(false);
-    expect(odd.settings.touchControls).toBe('auto');
-    expect(odd.highScores).toEqual({ b: 10 });
-    expect(new LearningTracker({ version: 1, records: 'nope' }).get('mul:2x2').state).toBe('NEW');
+    expect(parseSaveData('{not json').profiles).toHaveLength(1);
+    expect(parseSaveData(JSON.stringify({ version: 99 })).profiles[0].highScores).toEqual({});
+    const odd = parseSaveData(
+      JSON.stringify({
+        version: 2,
+        device: { muted: 'yes', touchControls: 'sideways' },
+        activeProfileId: 'missing',
+        profiles: [{ id: 'a', highScores: { a: -5, b: 10, c: 'x' } }, null, { id: 'a', name: 'Dup' }],
+      }),
+    );
+    expect(odd.device).toEqual({ muted: false, touchControls: 'auto' });
+    expect(odd.profiles).toHaveLength(2);
+    expect(new Set(odd.profiles.map((p) => p.id)).size).toBe(2); // duplicate ids fixed
+    expect(odd.activeProfileId).toBe('a');
+    expect(odd.profiles[0].highScores).toEqual({ b: 10 });
+    expect(parseSaveData(JSON.stringify({ version: 2, profiles: [] })).profiles).toHaveLength(1);
+  });
+});
+
+describe('player profiles', () => {
+  it('each player keeps their own stars, wardrobe, learning and settings', () => {
+    const storage = new StorageManager(new MemoryStore());
+    const profiles = new ProfileService(storage);
+    const rewards = new RewardService(storage);
+    const progress = new ProgressService(storage);
+    const first = profiles.activeId;
+
+    rewards.award(20, true);
+    rewards.buy('hat:cap');
+    progress.tracker.markIntroduced('count:1');
+    storage.updateProfile((p) => (p.settings.speed = 0));
+
+    const second = profiles.create('Ava', '🐼')!;
+    expect(profiles.activeId).toBe(second);
+    rewards.reload();
+    progress.reload();
+    expect(rewards.balance).toBe(0);
+    expect(rewards.state.equipped.hat).toBeNull();
+    expect(progress.tracker.get('count:1').state).toBe('NEW');
+    expect(storage.profile.settings.speed).toBeNull();
+    rewards.award(3, true);
+
+    profiles.switchTo(first);
+    rewards.reload();
+    progress.reload();
+    expect(rewards.balance).toBe(15);
+    expect(rewards.state.equipped.hat).toBe('hat:cap');
+    expect(progress.tracker.get('count:1').introductions).toBe(1);
+    expect(profiles.list().map((p) => p.stars)).toEqual([15, 3]);
+  });
+
+  it('an old learning tracker never writes into a different player', () => {
+    const storage = new StorageManager(new MemoryStore());
+    const profiles = new ProfileService(storage);
+    const progress = new ProgressService(storage);
+    const oldTracker = progress.tracker;
+    profiles.create('B', '🐸');
+    oldTracker.markIntroduced('count:2'); // a late write from the previous player's game
+    expect(storage.profile.learning).toBeNull();
+    expect(new LearningTracker(storage.data.profiles[0].learning).get('count:2').introductions).toBe(1);
+  });
+
+  it('names default to Player N, are trimmed, and the last player cannot be removed', () => {
+    const storage = new StorageManager(new MemoryStore());
+    const profiles = new ProfileService(storage);
+    expect(profiles.list()[0].name).toBe('Player 1');
+    const id = profiles.create('   A really very long name   ', '🦄')!;
+    expect(profiles.get(id)!.name).toBe('A really ver');
+    profiles.edit(id, 'Mo', 'not-an-avatar');
+    expect(profiles.get(id)).toMatchObject({ name: 'Mo', avatar: '🦄' });
+    expect(profiles.remove(id)).toBe(true);
+    expect(profiles.count).toBe(1);
+    expect(profiles.remove(profiles.activeId)).toBe(false);
+  });
+
+  it('caps the number of players', () => {
+    const profiles = new ProfileService(new StorageManager(new MemoryStore()));
+    for (let i = 0; i < 10; i++) profiles.create(`P${i}`, '🐶');
+    expect(profiles.count).toBe(6);
+    expect(profiles.canAdd).toBe(false);
+    expect(profiles.create('extra', '🐶')).toBeNull();
   });
 });

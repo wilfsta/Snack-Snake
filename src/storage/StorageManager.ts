@@ -32,9 +32,14 @@ export function createBestAvailableStore(): KeyValueStore {
 
 export type TouchControlsPreference = 'auto' | 'on' | 'off';
 
-export interface Settings {
+/** Settings that belong to the device, not to a child. */
+export interface DeviceSettings {
   muted: boolean;
   touchControls: TouchControlsPreference;
+}
+
+/** Settings each child keeps for themselves. */
+export interface ProfileSettings {
   lastPlayUnit: string | null;
   lastLearnUnit: string | null;
   lastSubject: string | null;
@@ -44,9 +49,13 @@ export interface Settings {
   answerCount: number | null;
 }
 
-export interface SaveData {
-  version: 1;
-  settings: Settings;
+/** Everything that belongs to one player. */
+export interface ProfileData {
+  id: string;
+  name: string;
+  avatar: string;
+  createdAt: number;
+  settings: ProfileSettings;
   highScores: Record<string, number>;
   bestStreaks: Record<string, number>;
   /** Times each world has been entered. */
@@ -57,27 +66,39 @@ export interface SaveData {
   learning: unknown;
 }
 
-export const SAVE_KEY = 'snack-snake.save.v1';
+export interface SaveData {
+  version: 2;
+  device: DeviceSettings;
+  activeProfileId: string;
+  profiles: ProfileData[];
+}
 
-export function defaultSaveData(): SaveData {
+export const SAVE_KEY = 'snack-snake.save.v1';
+export const DEFAULT_AVATAR = '🦊';
+export const MAX_NAME_LENGTH = 12;
+
+export function defaultProfileSettings(): ProfileSettings {
+  return { lastPlayUnit: null, lastLearnUnit: null, lastSubject: null, speed: null, walls: null, answerCount: null };
+}
+
+export function newProfile(id: string, name: string, avatar: string, createdAt = Date.now()): ProfileData {
   return {
-    version: 1,
-    settings: {
-      muted: false,
-      touchControls: 'auto',
-      lastPlayUnit: null,
-      lastLearnUnit: null,
-      lastSubject: null,
-      speed: null,
-      walls: null,
-      answerCount: null,
-    },
+    id,
+    name: name.trim().slice(0, MAX_NAME_LENGTH),
+    avatar,
+    createdAt,
+    settings: defaultProfileSettings(),
     highScores: {},
     bestStreaks: {},
     worldVisits: {},
     rewards: null,
     learning: null,
   };
+}
+
+export function defaultSaveData(): SaveData {
+  const first = newProfile('p1', '', DEFAULT_AVATAR, 0);
+  return { version: 2, device: { muted: false, touchControls: 'auto' }, activeProfileId: first.id, profiles: [first] };
 }
 
 function numberRecord(raw: unknown): Record<string, number> {
@@ -89,7 +110,47 @@ function numberRecord(raw: unknown): Record<string, number> {
   return out;
 }
 
-/** Tolerant parser: anything missing or malformed falls back to defaults instead of crashing. */
+function parseProfileSettings(raw: unknown): ProfileSettings {
+  const s = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  return {
+    lastPlayUnit: typeof s.lastPlayUnit === 'string' ? s.lastPlayUnit : null,
+    lastLearnUnit: typeof s.lastLearnUnit === 'string' ? s.lastLearnUnit : null,
+    lastSubject: typeof s.lastSubject === 'string' ? s.lastSubject : null,
+    speed: typeof s.speed === 'number' && Number.isFinite(s.speed) ? s.speed : null,
+    walls: s.walls === 'wrap' || s.walls === 'solid' ? s.walls : null,
+    answerCount: typeof s.answerCount === 'number' && Number.isFinite(s.answerCount) ? s.answerCount : null,
+  };
+}
+
+function parseDevice(raw: unknown): DeviceSettings {
+  const s = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  return {
+    muted: typeof s.muted === 'boolean' ? s.muted : false,
+    touchControls: s.touchControls === 'on' || s.touchControls === 'off' ? s.touchControls : 'auto',
+  };
+}
+
+/** Builds a profile from saved data; `fallbackId` is used when the id is missing or a duplicate. */
+function parseProfile(raw: Record<string, unknown>, fallbackId: string): ProfileData {
+  const id = typeof raw.id === 'string' && raw.id ? raw.id : fallbackId;
+  const name = typeof raw.name === 'string' ? raw.name : '';
+  const avatar = typeof raw.avatar === 'string' && raw.avatar ? raw.avatar : DEFAULT_AVATAR;
+  const createdAt = typeof raw.createdAt === 'number' ? raw.createdAt : 0;
+  return {
+    ...newProfile(id, name, avatar, createdAt),
+    settings: parseProfileSettings(raw.settings),
+    highScores: numberRecord(raw.highScores),
+    bestStreaks: numberRecord(raw.bestStreaks),
+    worldVisits: numberRecord(raw.worldVisits),
+    rewards: raw.rewards ?? null,
+    learning: raw.learning ?? null,
+  };
+}
+
+/**
+ * Tolerant parser: anything missing or malformed falls back to defaults instead of crashing.
+ * Version 1 saves (from before profiles) become the first player's profile, so no progress is lost.
+ */
 export function parseSaveData(json: string | null): SaveData {
   const data = defaultSaveData();
   if (!json) return data;
@@ -101,25 +162,30 @@ export function parseSaveData(json: string | null): SaveData {
   }
   if (!raw || typeof raw !== 'object') return data;
   const src = raw as Record<string, unknown>;
-  if (src.version !== 1) return data;
 
-  const s = (src.settings ?? {}) as Record<string, unknown>;
-  data.settings = {
-    muted: typeof s.muted === 'boolean' ? s.muted : false,
-    touchControls: s.touchControls === 'on' || s.touchControls === 'off' ? s.touchControls : 'auto',
-    lastPlayUnit: typeof s.lastPlayUnit === 'string' ? s.lastPlayUnit : null,
-    lastLearnUnit: typeof s.lastLearnUnit === 'string' ? s.lastLearnUnit : null,
-    lastSubject: typeof s.lastSubject === 'string' ? s.lastSubject : null,
-    speed: typeof s.speed === 'number' && Number.isFinite(s.speed) ? s.speed : null,
-    walls: s.walls === 'wrap' || s.walls === 'solid' ? s.walls : null,
-    answerCount: typeof s.answerCount === 'number' && Number.isFinite(s.answerCount) ? s.answerCount : null,
-  };
-  data.highScores = numberRecord(src.highScores);
-  data.bestStreaks = numberRecord(src.bestStreaks);
-  data.worldVisits = numberRecord(src.worldVisits);
-  data.rewards = src.rewards ?? null;
-  data.learning = src.learning ?? null;
-  return data;
+  if (src.version === 1) {
+    const legacy = (src.settings ?? {}) as Record<string, unknown>;
+    return {
+      version: 2,
+      device: parseDevice(legacy),
+      activeProfileId: 'p1',
+      profiles: [parseProfile({ ...src, id: 'p1', name: '', avatar: DEFAULT_AVATAR, settings: legacy }, 'p1')],
+    };
+  }
+  if (src.version !== 2) return data;
+
+  const profiles: ProfileData[] = [];
+  if (Array.isArray(src.profiles)) {
+    src.profiles.forEach((p, i) => {
+      if (!p || typeof p !== 'object') return;
+      let profile = parseProfile(p as Record<string, unknown>, `p${i + 1}`);
+      if (profiles.some((existing) => existing.id === profile.id)) profile = { ...profile, id: `p${Date.now()}${i}` };
+      profiles.push(profile);
+    });
+  }
+  if (profiles.length === 0) profiles.push(data.profiles[0]);
+  const active = typeof src.activeProfileId === 'string' && profiles.some((p) => p.id === src.activeProfileId) ? src.activeProfileId : profiles[0].id;
+  return { version: 2, device: parseDevice(src.device), activeProfileId: active, profiles };
 }
 
 /**
@@ -146,10 +212,23 @@ export class StorageManager {
     return this.current;
   }
 
+  /** The player whose turn it is. */
+  get profile(): Readonly<ProfileData> {
+    return this.current.profiles.find((p) => p.id === this.current.activeProfileId) ?? this.current.profiles[0];
+  }
+
   update(mutate: (data: SaveData) => void, immediate = false): void {
     mutate(this.current);
     if (immediate) this.flush();
     else this.scheduleSave();
+  }
+
+  /** Changes the active player's data. */
+  updateProfile(mutate: (profile: ProfileData) => void, immediate = false): void {
+    this.update((d) => {
+      const profile = d.profiles.find((p) => p.id === d.activeProfileId) ?? d.profiles[0];
+      mutate(profile);
+    }, immediate);
   }
 
   scheduleSave(delayMs = 400): void {

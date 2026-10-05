@@ -13,7 +13,9 @@ import { BackdropController } from './controllers/BackdropController';
 import { GameController } from './controllers/GameController';
 import { MenuController } from './controllers/MenuController';
 import { NUMBER_GARDEN } from '../worlds/worlds';
+import { ProfileController } from './controllers/ProfileController';
 import { WardrobeController } from './controllers/WardrobeController';
+import { ProfileService } from './services/ProfileService';
 import { ProgressService } from './services/ProgressService';
 import { RewardService } from './services/RewardService';
 import { SettingsService } from './services/SettingsService';
@@ -32,10 +34,12 @@ type AppState =
   | 'PAUSED'
   | 'SESSION_COMPLETE'
   | 'GAME_OVER'
-  | 'WARDROBE';
+  | 'WARDROBE'
+  | 'PROFILES';
 
 const TRANSITIONS: Readonly<Record<AppState, readonly AppState[]>> = {
-  MENU: ['SUBJECT_SELECT', 'OPTIONS', 'PLAYING', 'WARDROBE'],
+  MENU: ['SUBJECT_SELECT', 'OPTIONS', 'PLAYING', 'WARDROBE', 'PROFILES'],
+  PROFILES: ['MENU'],
   WARDROBE: ['MENU', 'PLAYING'],
   OPTIONS: ['MENU', 'PAUSED'],
   SUBJECT_SELECT: ['MENU', 'TABLE_SELECT'],
@@ -63,13 +67,15 @@ export class App implements Navigator {
   private readonly rewards: RewardService;
   private readonly menus: MenuController;
   private readonly wardrobe: WardrobeController;
+  private readonly profiles: ProfileService;
+  private readonly profileScreens: ProfileController;
   private readonly games: GameController;
   private readonly backdrop: BackdropController;
   /** Where "Done" in Options returns to. */
   private optionsFromPause = false;
 
   constructor() {
-    this.audio = new AudioManager(this.storage.data.settings.muted);
+    this.audio = new AudioManager(this.storage.data.device.muted);
 
     const canvas = document.getElementById('game');
     if (!(canvas instanceof HTMLCanvasElement)) throw new Error('Missing #game canvas');
@@ -86,7 +92,9 @@ export class App implements Navigator {
     this.settings = new SettingsService(this.storage, this.audio, this.ui);
     this.progress = new ProgressService(this.storage);
     this.rewards = new RewardService(this.storage);
-    this.menus = new MenuController(this, this.ui, this.audio, this.settings, this.progress, this.rewards);
+    this.profiles = new ProfileService(this.storage);
+    this.profileScreens = new ProfileController(this, this.ui, this.audio, this.profiles);
+    this.menus = new MenuController(this, this.ui, this.audio, this.settings, this.progress, this.rewards, this.profiles);
     this.games = new GameController(this, this.ui, this.audio, this.renderer, this.settings, this.progress, this.rewards);
     this.wardrobe = new WardrobeController(this, this.ui, this.audio, this.rewards);
     this.backdrop = new BackdropController(this.renderer, () => this.rewards.skin());
@@ -121,7 +129,13 @@ export class App implements Navigator {
   }
 
   start(): void {
-    this.showMenu();
+    // With more than one player, the first question is always "who's playing?".
+    if (this.profiles.count > 1) {
+      this.goTo('PROFILES');
+      this.profileScreens.showPicker(false);
+    } else {
+      this.showMenu();
+    }
     this.loop.start();
   }
 
@@ -168,6 +182,23 @@ export class App implements Navigator {
     this.games.stop();
     this.goTo('WARDROBE');
     this.wardrobe.show();
+  }
+
+  openProfiles(): void {
+    this.games.stop();
+    this.goTo('PROFILES');
+    this.profileScreens.showPicker(true);
+  }
+
+  switchPlayer(id: string): void {
+    this.profiles.switchTo(id);
+    this.reloadPlayer();
+    this.showMenu();
+  }
+
+  reloadPlayer(): void {
+    this.progress.reload();
+    this.rewards.reload();
   }
 
   playWorld(): void {
