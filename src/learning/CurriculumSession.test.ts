@@ -234,6 +234,35 @@ describe('finding the edge of what a child knows', () => {
   });
 });
 
+describe('developer view', () => {
+  it('reports the engine’s reasoning truthfully', () => {
+    const engine = freshEngine(14);
+    const session = engine.createCurriculumSession(GARDEN_CURRICULUM, 12, { answerCount: 3 });
+    const before = session.debugInfo();
+    expect(before.frontier).toBe(0);
+    expect(before.explore).not.toBeNull(); // a fresh child starts with quiet checks
+    const child = makeChild((g) => g <= ADD_TO_10);
+    for (let i = 0; i < 6; i++) {
+      const ch = session.next();
+      const ok = child.answer(ch.itemId, ch.stage);
+      session.record({ type: 'answered', challenge: ch, optionId: 'x', correct: ok, attemptNumber: 1, hintStrength: 0 });
+      session.record({ type: 'completed', challenge: ch, firstTryCorrect: ok });
+    }
+    const info = session.debugInfo();
+    expect(info.frontier).toBe(session.frontier);
+    expect(info.recent).toHaveLength(6);
+    expect(info.recent.every((r) => r.kind === 'probe')).toBe(true);
+    // Five checks inside what the child knows, then a jump too far shows up as a miss.
+    expect(info.recent.slice(0, 5).every((r) => r.result === true)).toBe(true);
+    expect(info.recent[5].result).toBe(false);
+    expect(indexOf(info.recent[5].groupId)).toBeGreaterThan(ADD_TO_10);
+    expect(info.groups.filter((g) => g.status === 'assumed').length).toBeGreaterThan(0);
+    expect(info.groups.find((g) => g.status === 'assumed' && g.how === 'implied')).toBeDefined();
+    // Reading the debug view changes nothing.
+    expect(session.debugInfo()).toEqual(info);
+  });
+});
+
 describe('players and rewards', () => {
   it('placement evidence belongs to each player separately', () => {
     const storage = new StorageManager(new MemoryStore());

@@ -14,6 +14,7 @@ import { GameController } from './controllers/GameController';
 import { MenuController } from './controllers/MenuController';
 import { NUMBER_GARDEN } from '../worlds/worlds';
 import { ProfileController } from './controllers/ProfileController';
+import { DebugOverlay, debugRequested } from './debug/DebugOverlay';
 import { WardrobeController } from './controllers/WardrobeController';
 import { ProfileService } from './services/ProfileService';
 import { ProgressService } from './services/ProgressService';
@@ -128,7 +129,58 @@ export class App implements Navigator {
     );
   }
 
+  // ---- Developer overlay (only with ?debug in the address) --------------------------------------
+
+  private debug: DebugOverlay | null = null;
+  private lastDebugAt = 0;
+
+  private setUpDebug(): void {
+    if (!debugRequested()) return;
+    this.debug = new DebugOverlay({
+      resetLearning: () => this.resetActivePlayer(false),
+      resetEverything: () => this.resetActivePlayer(true),
+    });
+  }
+
+  /** Playtesting helper: start the active player's journey again. */
+  private resetActivePlayer(everything: boolean): void {
+    // Leave any game first, so its session can't write old progress back afterwards.
+    this.showMenu();
+    this.storage.updateProfile((p) => {
+      p.learning = null;
+      if (everything) {
+        p.rewards = null;
+        p.worldVisits = {};
+        p.highScores = {};
+        p.bestStreaks = {};
+      }
+    }, true);
+    this.reloadPlayer();
+    this.showMenu();
+  }
+
+  private updateDebug(): void {
+    if (!this.debug) return;
+    const now = performance.now();
+    if (now - this.lastDebugAt < 250) return;
+    this.lastDebugAt = now;
+    const snapshot = this.games.debugSnapshot();
+    // Outside the Garden, preview where the journey stands (a fresh session reads but never writes).
+    const curriculum = snapshot?.curriculum ?? this.progress.engine.createCurriculumSession(NUMBER_GARDEN.curriculum, 0).debugInfo();
+    const player = this.profiles.get(this.profiles.activeId);
+    this.debug.update({
+      player: player ? `${player.avatar} ${player.name}` : '?',
+      appState: this.states.current,
+      mode: snapshot?.mode ?? null,
+      phase: snapshot?.phase ?? null,
+      stars: this.rewards.balance,
+      curriculum,
+      preview: !snapshot?.curriculum,
+    });
+  }
+
   start(): void {
+    this.setUpDebug();
     // With more than one player, the first question is always "who's playing?".
     if (this.profiles.count > 1) {
       this.goTo('PROFILES');
@@ -273,5 +325,6 @@ export class App implements Navigator {
     this.input.poll();
     if (this.games.active) this.games.render();
     else this.backdrop.render();
+    this.updateDebug();
   }
 }

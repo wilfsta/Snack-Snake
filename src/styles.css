@@ -1770,3 +1770,62 @@ button:focus-visible {
   font-size: 56px;
   line-height: 1;
 }
+
+/* ---------- Developer overlay (?debug only; never seen by children) ---------- */
+
+.debug-overlay {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 100;
+  width: min(560px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+  background: rgba(10, 12, 30, 0.88);
+  color: #d8f3ff;
+  border: 1px solid #3ec1ff;
+  border-radius: 10px;
+  font: 12px/1.35 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  pointer-events: auto;
+  user-select: text;
+}
+
+.debug-bar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(62, 193, 255, 0.4);
+  position: sticky;
+  top: 0;
+  background: rgba(10, 12, 30, 0.95);
+}
+
+.debug-bar strong {
+  flex: 1;
+}
+
+.debug-bar button {
+  font: inherit;
+  color: #0a0c1e;
+  background: #3ec1ff;
+  border: 0;
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.debug-body {
+  margin: 0;
+  padding: 8px 10px;
+  white-space: pre;
+}
+
+.debug-overlay.collapsed .debug-body,
+.debug-overlay.collapsed .debug-bar button:not(:last-child) {
+  display: none;
+}
+
+.debug-overlay.collapsed {
+  width: auto;
+}

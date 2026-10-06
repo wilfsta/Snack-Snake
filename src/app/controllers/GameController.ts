@@ -4,7 +4,7 @@ import { DIRECTION_VECTORS, directionAngle, type Direction } from '../../core/ge
 import { chooseArenaSize } from '../../game/Arena';
 import { buildRules } from '../../game/modes';
 import { SESSION_TIMING, SnakeSession, teachingPlan, type DeathCause, type GameOverInfo, type SessionEvent } from '../../game/SnakeSession';
-import type { CurriculumSession } from '../../learning/CurriculumSession';
+import { CurriculumSession, type CurriculumDebugInfo } from '../../learning/CurriculumSession';
 import type { LearnSession, PracticeSession, StateChange } from '../../learning/LearningEngine';
 
 type QuestionSource = LearnSession | PracticeSession | CurriculumSession;
@@ -72,6 +72,18 @@ export class GameController {
 
   get active(): boolean {
     return this.game !== null;
+  }
+
+  /** For the hidden developer overlay: what is being played and, in worlds, the engine's reasoning. */
+  debugSnapshot(): { mode: string; phase: string; curriculum: CurriculumDebugInfo | null } | null {
+    const game = this.game;
+    if (!game) return null;
+    const source = game.source;
+    return {
+      mode: game.spec.mode,
+      phase: game.session.phase.kind,
+      curriculum: source instanceof CurriculumSession ? source.debugInfo() : null,
+    };
   }
 
   private click(action: () => void): () => void {

@@ -27,6 +27,8 @@ npm run preview  # serve the production build (also LAN-accessible)
 
 Menus are navigable with arrows/D-pad. Press a controller button once if the browser hasn't detected it yet.
 
+**Playtesting:** add `?debug` to the address (e.g. `http://localhost:5173/?debug`) to see what the learning engine is thinking – frontier, confidence, which skill groups are secure/assumed, and why each question was asked. It has buttons to reset the current player. Press ` (backtick) to fold it away. Children never see it.
+
 ## Architecture
 
 ```

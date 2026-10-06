@@ -27,6 +27,29 @@ export interface CurriculumHooks extends SessionHooks {
   onGroupsPassed?: (groupIds: readonly string[]) => void;
 }
 
+export interface CurriculumDebugInfo {
+  readonly curriculumId: string;
+  readonly frontier: number;
+  readonly frontierGroup: string;
+  readonly groupCount: number;
+  readonly confidence: string;
+  readonly streak: number;
+  readonly explore: { readonly lo: string; readonly target: string; readonly hi: string; readonly atTarget: number } | null;
+  readonly probesAsked: number;
+  readonly pendingRecheck: string | null;
+  readonly groups: readonly {
+    readonly id: string;
+    readonly status: 'secure' | 'assumed' | 'open';
+    readonly how: 'probe' | 'implied' | null;
+    readonly confirms: number;
+    readonly doubts: number;
+    readonly known: number;
+    readonly size: number;
+  }[];
+  /** Recent questions: why each was asked (probe / recheck / learn / review) and how it went. */
+  readonly recent: readonly { readonly kind: string; readonly groupId: string; readonly itemId: string; readonly stage: string; readonly result: boolean | null }[];
+}
+
 /** Why a challenge was asked, so its result is interpreted correctly. */
 type Purpose =
   | { readonly kind: 'probe'; readonly group: number }
@@ -262,7 +285,44 @@ export class CurriculumSession extends BaseSession {
     this.askedThisSession.add(itemId);
     const challenge = this.build(this.tracker.get(itemId), { stage, hintStrength: stage === 'guided' ? hintStrength : 0 });
     this.purposes.set(challenge.id, purpose);
+    this.log.push({ challengeId: challenge.id, kind: purpose.kind, groupId: this.groups[purpose.group].id, itemId, stage, result: null });
+    if (this.log.length > 12) this.log.shift();
     return challenge;
+  }
+
+  // ---- Developer view (never shown to children) -----------------------------------------------
+
+  private readonly log: { challengeId: string; kind: Purpose['kind']; groupId: string; itemId: string; stage: string; result: boolean | null }[] = [];
+
+  /** A read-only picture of the engine's reasoning, for the hidden debug overlay and tests. */
+  debugInfo(): CurriculumDebugInfo {
+    const f = this.frontier;
+    return {
+      curriculumId: this.curriculum.id,
+      frontier: f,
+      frontierGroup: f < this.groups.length ? this.groups[f].id : '(journey complete)',
+      groupCount: this.groups.length,
+      confidence: confidenceFrom(this.results),
+      streak: this.streak,
+      explore: this.explore
+        ? { lo: this.groups[this.explore.lo]?.id ?? '-', target: this.groups[this.explore.target]?.id ?? '-', hi: this.groups[this.explore.hi]?.id ?? 'end', atTarget: this.explore.atTarget }
+        : null,
+      probesAsked: this.probesAsked,
+      pendingRecheck: this.pendingRecheck === null ? null : this.groups[this.pendingRecheck].id,
+      groups: this.groups.map((g, i) => {
+        const a = this.assumed(i);
+        return {
+          id: g.id,
+          status: this.secure(i) ? 'secure' : a ? 'assumed' : 'open',
+          how: a?.how ?? null,
+          confirms: a?.confirms ?? 0,
+          doubts: a?.doubts ?? 0,
+          known: this.records(i).filter(itemKnown).length,
+          size: g.itemIds.length,
+        };
+      }),
+      recent: this.log.map(({ kind, groupId, itemId, stage, result }) => ({ kind, groupId, itemId, stage, result })),
+    };
   }
 
   // ---- Learning from the answer ------------------------------------------------------------------
@@ -270,6 +330,8 @@ export class CurriculumSession extends BaseSession {
   protected override onChallengeCompleted(challenge: Challenge, firstTryCorrect: boolean): void {
     const purpose = this.purposes.get(challenge.id);
     this.purposes.delete(challenge.id);
+    const entry = this.log.find((e) => e.challengeId === challenge.id);
+    if (entry && challenge.stage !== 'introduce') entry.result = firstTryCorrect;
     // Evidence only counts when nothing helped: a plain question, right first time.
     const unaided = challenge.stage === 'independent' && firstTryCorrect;
     if (challenge.stage !== 'introduce') this.streak = unaided ? this.streak + 1 : 0;
