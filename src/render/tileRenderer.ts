@@ -83,7 +83,7 @@ export function drawTile(ctx: CanvasRenderingContext2D, layout: Layout, tile: Ti
 
   // Label (one or two lines), shrunk to fit.
   const lines = tile.label.split('\n');
-  let size = Math.min(h * (lines.length > 1 ? 0.4 : 0.56), c * 1.05);
+  let size = Math.min(h * (lines.length > 1 ? 0.86 / lines.length : 0.56), c * 1.05);
   ctx.font = `700 ${size}px ${FONT_STACK}`;
   const maxW = w * 0.84;
   const measured = Math.max(...lines.map((l) => ctx.measureText(l).width));

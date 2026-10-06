@@ -202,7 +202,7 @@ export class App implements Navigator {
   }
 
   playWorld(): void {
-    this.startGame({ mode: 'garden', unitId: NUMBER_GARDEN.path.id, worldId: NUMBER_GARDEN.id });
+    this.startGame({ mode: 'garden', unitId: `world:${NUMBER_GARDEN.id}`, worldId: NUMBER_GARDEN.id });
   }
 
   startGame(spec: GameSpec): void {

@@ -1,19 +1,18 @@
-import { ADDITION } from '../content/arithmetic/operations';
-import { countItemId, MAX_COUNT } from '../content/counting/CountingContent';
-import type { LearningUnit } from '../learning/types';
+import type { Curriculum } from '../learning/curriculum';
 import type { ArenaThemeId } from '../render/themes';
+import { GARDEN_CURRICULUM } from './gardenCurriculum';
 
 /**
- * A world is a place to play plus a learning path through it. The child never picks
- * "a table" – the learning engine walks the path, unlocking the next item when they are ready.
+ * A world is a place to play plus a learning journey through it. The child never picks
+ * "a table" or a level – the learning engine works out where they are and what comes next.
  */
 export interface WorldDefinition {
   readonly id: string;
   readonly name: string;
   readonly icon: string;
   readonly theme: ArenaThemeId;
-  /** Ordered items (possibly spanning several subjects) that make up the world. */
-  readonly path: LearningUnit;
+  /** The skill groups that make up the world, in journey order. */
+  readonly curriculum: Curriculum;
   /** Answers per question. Young worlds keep this small. */
   readonly answerCount: number;
   /** Plain apples to eat before any numbers appear: lots on the first visit, a couple after. */
@@ -22,30 +21,12 @@ export interface WorldDefinition {
   readonly visitLength: number;
 }
 
-/** Number Garden path: count to 10, then adding within 10 (+1s first, then +2s ...). */
-function gardenPath(): string[] {
-  const items: string[] = [];
-  for (let n = 1; n <= MAX_COUNT; n++) items.push(countItemId(n));
-  for (let add = 1; add <= 5; add++) {
-    for (let k = 1; k + add <= 10; k++) items.push(ADDITION.itemId(add, k));
-  }
-  return items;
-}
-
 export const NUMBER_GARDEN: WorldDefinition = {
   id: 'garden',
   name: 'Number Garden',
   icon: '🌻',
   theme: 'garden',
-  path: {
-    id: 'world:garden',
-    subjectId: 'world',
-    title: 'Number Garden',
-    shortTitle: '🌻',
-    itemIds: gardenPath(),
-    initialBatch: 3,
-    supportsLearning: true,
-  },
+  curriculum: GARDEN_CURRICULUM,
   answerCount: 3,
   warmup: { firstVisit: 6, laterVisits: 2 },
   visitLength: 12,

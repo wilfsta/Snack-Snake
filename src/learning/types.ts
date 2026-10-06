@@ -31,6 +31,11 @@ export interface Challenge {
   readonly category: string;
   /** The question as shown to the player, e.g. "6 × 4". */
   readonly prompt: string;
+  /**
+   * How to ask the question while answers are on screen. Defaults to "<prompt> = ?", which
+   * suits sums; questions like "3, 4, ?, 6" or "which has the most?" say it their own way.
+   */
+  readonly askAs?: string;
   /** The complete fact, e.g. "6 × 4 = 24". Used for introductions and reinforcement. */
   readonly statement: string;
   readonly correctAnswer: AnswerOption;

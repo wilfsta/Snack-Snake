@@ -4,7 +4,10 @@ import { DIRECTION_VECTORS, directionAngle, type Direction } from '../../core/ge
 import { chooseArenaSize } from '../../game/Arena';
 import { buildRules } from '../../game/modes';
 import { SESSION_TIMING, SnakeSession, teachingPlan, type DeathCause, type GameOverInfo, type SessionEvent } from '../../game/SnakeSession';
+import type { CurriculumSession } from '../../learning/CurriculumSession';
 import type { LearnSession, PracticeSession, StateChange } from '../../learning/LearningEngine';
+
+type QuestionSource = LearnSession | PracticeSession | CurriculumSession;
 import { Effects } from '../../render/Effects';
 import type { GameRenderer } from '../../render/GameRenderer';
 import { SnakeAnimator } from '../../render/SnakeAnimator';
@@ -33,7 +36,7 @@ interface ActiveGame {
   readonly spec: GameSpec;
   readonly session: SnakeSession;
   /** Null in Classic mode (no questions). */
-  readonly source: LearnSession | PracticeSession | null;
+  readonly source: QuestionSource | null;
   readonly world: WorldDefinition | null;
   newlyMastered: number;
   /** Questions answered correctly this visit (shown as stars in worlds). */
@@ -90,15 +93,15 @@ export class GameController {
     const engine = this.progress.engine;
     const onStateChange = (change: StateChange) => this.onMasteryChange(change);
 
-    let source: LearnSession | PracticeSession | null = null;
+    let source: QuestionSource | null = null;
     let warmupFood = 0;
     if (world) {
       const visitsBefore = this.progress.visitWorld(world.id);
       warmupFood = visitsBefore === 0 ? world.warmup.firstVisit : world.warmup.laterVisits;
-      source = engine.createLearnSession(world.path, world.visitLength, {
+      source = engine.createCurriculumSession(world.curriculum, world.visitLength, {
         onStateChange,
         answerCount: world.answerCount,
-        probeNewItems: true,
+        onGroupsPassed: (groupIds) => this.onGroupsPassed(groupIds),
       });
     } else if (spec.mode === 'learn') {
       source = engine.createLearnSession(spec.unitId, LEARN_SESSION_LENGTH, { onStateChange, answerCount: options.answerCount });
@@ -219,6 +222,24 @@ export class GameController {
         onHome: this.click(() => this.nav.showMenu()),
       },
     );
+  }
+
+  /**
+   * The child has moved past one or more skill groups (learnt them, or showed they already knew
+   * them). One modest celebration, paid once per group, never a pile of stars per skipped thing.
+   */
+  private onGroupsPassed(groupIds: readonly string[]): void {
+    const game = this.game;
+    if (!game) return;
+    const { stars, newPlants } = this.rewards.awardMilestones(groupIds, game.world !== null);
+    if (stars <= 0) return;
+    game.stars += stars;
+    game.newPlants += newPlants.length;
+    const head = game.session.snake.head;
+    this.effects.popText({ x: head.x + 0.5, y: head.y - 1.2 }, `⭐ +${stars}`, '#ffd54a', 1.2, 2);
+    if (newPlants.length > 0) this.effects.popText({ x: head.x + 0.5, y: head.y - 2.4 }, newPlants.join(' '), '#ffffff', 1.2, 2.2);
+    this.effects.burst({ x: head.x + 0.5, y: head.y + 0.5 }, 26, { shapes: ['star'], colors: ['#ffd54a', '#fff6c2', '#ffb43a'] });
+    this.audio.play('learnAchievement');
   }
 
   /** Awards stars; in a world, celebrates anything that grew in the garden. */
@@ -410,7 +431,9 @@ export class GameController {
     const kind = session.phase.kind;
     const showing =
       kind === 'swallow' || kind === 'answer' || kind === 'reaction' || (kind === 'dying' && session.phase.cause === 'wrong-answer');
-    return showing && session.challenge ? session.challenge.prompt : null;
+    const ch = session.challenge;
+    if (!showing || !ch) return null;
+    return ch.askAs ?? `${ch.prompt.replace(/\n/g, ' ')} = ?`;
   }
 
   private readyBanner(session: SnakeSession): { text: string; age: number } | null {

@@ -7,28 +7,13 @@ import {
   planStage,
   practiceWeight,
   shouldUnlockMore,
-  type StagePlan,
 } from './selection';
-import type { Challenge, ChallengeEvent, ChallengeSource, LearningContent, LearningUnit } from './types';
+import type { Challenge, LearningContent, LearningUnit } from './types';
+import { BaseSession, type SessionHooks } from './BaseSession';
+import type { Curriculum } from './curriculum';
+import { CurriculumSession, type CurriculumHooks } from './CurriculumSession';
 
-export interface StateChange {
-  readonly itemId: string;
-  readonly from: MasteryState;
-  readonly to: MasteryState;
-}
-
-export interface SessionHooks {
-  onStateChange?: (change: StateChange) => void;
-  /** Total answers shown per question, including the right one (default 5). */
-  answerCount?: number;
-  /**
-   * When the learner is on a roll, try a new item as a plain question first. Right first time
-   * means they already know it, so the introduction and hinted practice are skipped.
-   */
-  probeNewItems?: boolean;
-}
-
-export const DEFAULT_ANSWER_COUNT = 5;
+export { DEFAULT_ANSWER_COUNT, type SessionHooks, type StateChange } from './BaseSession';
 
 export interface UnitItemSummary {
   readonly itemId: string;
@@ -41,12 +26,6 @@ export interface UnitSummary {
   readonly unit: LearningUnit;
   readonly counts: MasteryCounts;
   readonly items: readonly UnitItemSummary[];
-}
-
-let challengeCounter = 0;
-function nextChallengeId(): string {
-  challengeCounter += 1;
-  return `ch${challengeCounter}`;
 }
 
 /**
@@ -77,6 +56,14 @@ export class LearningEngine {
     return new LearnSession(resolved, this.tracker, this.content, this.rng, hooks, sessionLength);
   }
 
+  /**
+   * A journey through a whole curriculum (e.g. a world): finds the edge of what the child
+   * knows with ordinary questions, teaches there, and fast-tracks what they already know.
+   */
+  createCurriculumSession(curriculum: Curriculum, sessionLength: number, hooks: CurriculumHooks = {}): CurriculumSession {
+    return new CurriculumSession(curriculum, this.tracker, this.content, this.rng, hooks, sessionLength);
+  }
+
   /** Play mode: endless independent recall across the whole unit. */
   createPracticeSession(unitId: string, hooks: SessionHooks = {}): PracticeSession {
     return new PracticeSession(this.requireUnit(unitId), this.tracker, this.content, this.rng, hooks);
@@ -91,84 +78,19 @@ export class LearningEngine {
   }
 }
 
-abstract class BaseSession implements ChallengeSource {
-  protected readonly recent: string[] = [];
-  /** First-try results of recent questions this session (true = right first time). */
-  protected readonly results: boolean[] = [];
-  protected completed = 0;
-
-  constructor(
-    readonly unit: LearningUnit,
-    protected readonly tracker: LearningTracker,
-    protected readonly content: LearningContent,
-    protected readonly rng: Rng,
-    protected readonly hooks: SessionHooks,
-  ) {}
-
-  abstract next(): Challenge;
-  abstract isSessionComplete(): boolean;
-
-  get completedCount(): number {
-    return this.completed;
-  }
-
-  record(event: ChallengeEvent): void {
-    const itemId = event.challenge.itemId;
-    const before = this.tracker.get(itemId).state;
-    switch (event.type) {
-      case 'introduced':
-        this.tracker.markIntroduced(itemId);
-        break;
-      case 'answered':
-        this.tracker.recordAttempt(itemId, {
-          kind: event.challenge.stage === 'guided' ? 'guided' : 'independent',
-          correct: event.correct,
-          firstTry: event.attemptNumber === 1,
-          hintStrength: event.hintStrength,
-        });
-        break;
-      case 'completed':
-        this.completed++;
-        if (event.challenge.stage !== 'introduce') {
-          this.results.push(event.firstTryCorrect);
-          if (this.results.length > 8) this.results.shift();
-        }
-        this.onCompleted();
-        break;
-    }
-    const after = this.tracker.get(itemId).state;
-    if (before !== after) this.hooks.onStateChange?.({ itemId, from: before, to: after });
-  }
-
-  protected onCompleted(): void {}
-
-  protected build(record: MasteryRecord, plan: StagePlan): Challenge {
-    this.tracker.markPresented(record.itemId);
-    this.recent.push(record.itemId);
-    if (this.recent.length > 8) this.recent.shift();
-    return this.content.createChallenge(record.itemId, {
-      challengeId: nextChallengeId(),
-      stage: plan.stage,
-      hintStrength: plan.hintStrength,
-      distractorCount: Math.max(1, (this.hooks.answerCount ?? DEFAULT_ANSWER_COUNT) - 1),
-      rng: this.rng,
-    });
-  }
-}
-
 export class LearnSession extends BaseSession {
   private sinceIntroduction = Number.POSITIVE_INFINITY;
   private readonly probed = new Set<string>();
 
   constructor(
-    unit: LearningUnit,
+    readonly unit: LearningUnit,
     tracker: LearningTracker,
     content: LearningContent,
     rng: Rng,
     hooks: SessionHooks,
     readonly sessionLength: number,
   ) {
-    super(unit, tracker, content, rng, hooks);
+    super(tracker, content, rng, hooks);
   }
 
   isSessionComplete(): boolean {
@@ -200,7 +122,7 @@ export class LearnSession extends BaseSession {
     return this.build(record, planStage(record));
   }
 
-  protected override onCompleted(): void {
+  protected override onChallengeCompleted(): void {
     if (this.isSessionComplete() && this.completed === this.sessionLength) {
       const progress = this.tracker.unitProgress(this.unit.id, this.initialUnlocked());
       this.tracker.setUnitProgress(this.unit.id, { ...progress, sessionsCompleted: progress.sessionsCompleted + 1 });
@@ -235,6 +157,16 @@ export class LearnSession extends BaseSession {
 }
 
 export class PracticeSession extends BaseSession {
+  constructor(
+    readonly unit: LearningUnit,
+    tracker: LearningTracker,
+    content: LearningContent,
+    rng: Rng,
+    hooks: SessionHooks,
+  ) {
+    super(tracker, content, rng, hooks);
+  }
+
   isSessionComplete(): boolean {
     return false;
   }

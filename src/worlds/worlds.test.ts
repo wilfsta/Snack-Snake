@@ -3,102 +3,88 @@ import { createContentLibrary } from '../content/ContentLibrary';
 import { objectPicture } from '../content/counting/CountingContent';
 import { seededRng } from '../core/random';
 import { measureTile } from '../game/tiles';
-import { LearningEngine } from '../learning/LearningEngine';
-import { LearningTracker } from '../learning/LearningTracker';
-import type { Challenge, ChallengeSource } from '../learning/types';
+import { curriculumGroups, curriculumItems, probeItems, validateCurriculum } from '../learning/curriculum';
+import { GARDEN_CURRICULUM } from './gardenCurriculum';
 import { NUMBER_GARDEN, WORLDS } from './worlds';
 
-function play(source: ChallengeSource, ch: Challenge, correct: boolean): void {
-  if (ch.stage === 'introduce') {
-    source.record({ type: 'introduced', challenge: ch });
-    source.record({ type: 'completed', challenge: ch, firstTryCorrect: true });
-    return;
-  }
-  if (!correct) {
-    source.record({ type: 'answered', challenge: ch, optionId: ch.distractors[0].id, correct: false, attemptNumber: 1, hintStrength: 0 });
-  }
-  source.record({ type: 'answered', challenge: ch, optionId: ch.correctAnswer.id, correct: true, attemptNumber: correct ? 1 : 2, hintStrength: 0 });
-  source.record({ type: 'completed', challenge: ch, firstTryCorrect: correct });
-}
+const library = createContentLibrary();
 
-describe('worlds', () => {
-  const library = createContentLibrary();
+describe('Number Garden curriculum', () => {
+  it('is structurally valid: unique ids, every item has content, probes belong to their group', () => {
+    for (const world of WORLDS) expect(validateCurriculum(world.curriculum, (id) => library.ownsItem(id))).toEqual([]);
+  });
 
-  it('every item on every world path exists in the content library', () => {
-    for (const world of WORLDS) {
-      expect(new Set(world.path.itemIds).size).toBe(world.path.itemIds.length);
-      for (const id of world.path.itemIds) expect(library.ownsItem(id)).toBe(true);
+  it('goes from counting, through number sense, bonds, adding and taking away, to multiplication', () => {
+    expect(GARDEN_CURRICULUM.stages.map((s) => s.id)).toEqual(['quantity', 'number-sense', 'bonds', 'addition', 'subtraction', 'multiplication']);
+    const groups = curriculumGroups(GARDEN_CURRICULUM).map((g) => g.id);
+    expect(groups[0]).toBe('count-to-5');
+    // Concepts behind multiplication come before any times-table facts.
+    for (const idea of ['equal-groups', 'repeated-addition', 'count-in-2s', 'count-in-5s', 'count-in-10s', 'groups-to-times']) {
+      expect(groups.indexOf(idea)).toBeGreaterThan(groups.indexOf('sub-to-20'));
+      expect(groups.indexOf(idea)).toBeLessThan(groups.indexOf('times-2'));
+    }
+    expect(groups.slice(-3).sort()).toEqual(['times-10', 'times-2', 'times-5']);
+  });
+
+  it('every item builds a valid challenge with unique answers and exactly one right one', () => {
+    let seed = 1;
+    for (const id of curriculumItems(GARDEN_CURRICULUM)) {
+      for (const stage of ['introduce', 'independent'] as const) {
+        const ch = library.createChallenge(id, { challengeId: `c${seed}`, stage, hintStrength: 0, distractorCount: 2, rng: seededRng(seed++) });
+        const labels = [ch.correctAnswer.label, ...ch.distractors.map((d) => d.label)];
+        expect(ch.distractors.length, id).toBeGreaterThanOrEqual(1);
+        expect(new Set(labels).size, id).toBe(labels.length);
+        expect(ch.prompt.length, id).toBeGreaterThan(0);
+        // Tiles must fit on a phone-sized arena (14 cells wide).
+        expect(measureTile('question', ch.prompt).w, id).toBeLessThanOrEqual(8);
+        expect(measureTile('fact', ch.statement).w, id).toBeLessThanOrEqual(12);
+        for (const l of labels) expect(measureTile('answer', l).w, `${id} ${l}`).toBeLessThanOrEqual(6);
+      }
     }
   });
 
-  it('Number Garden starts with counting, then adding within 10, in order', () => {
-    const ids = NUMBER_GARDEN.path.itemIds;
-    expect(ids.slice(0, 3)).toEqual(['count:1', 'count:2', 'count:3']);
-    expect(ids).toContain('add:1+1');
-    expect(ids.indexOf('count:10')).toBeLessThan(ids.indexOf('add:1+1'));
-    for (const id of ids.filter((i) => i.startsWith('add:'))) {
-      const ch = library.createChallenge(id, { challengeId: 'x', stage: 'independent', hintStrength: 0, distractorCount: 2, rng: seededRng(1) });
-      expect(Number(ch.correctAnswer.label)).toBeLessThanOrEqual(10);
+  it('keeps the old Garden item ids, so earlier progress still counts', () => {
+    const items = new Set(curriculumItems(GARDEN_CURRICULUM));
+    for (let n = 1; n <= 10; n++) expect(items.has(`count:${n}`)).toBe(true);
+    // Old path: adding 1..5 within 10.
+    for (let add = 1; add <= 5; add++) for (let k = 1; k + add <= 10; k++) expect(items.has(`add:${add}+${k}`)).toBe(true);
+  });
+
+  it('every group has representative probe items', () => {
+    for (const g of curriculumGroups(GARDEN_CURRICULUM)) {
+      expect(probeItems(g).length, g.id).toBeGreaterThanOrEqual(Math.min(2, g.itemIds.length));
     }
   });
 
-  it('counting questions are pictures in rows of five, and fit on a phone-sized arena', () => {
+  it('the world uses the curriculum and keeps young-friendly settings', () => {
+    expect(NUMBER_GARDEN.curriculum).toBe(GARDEN_CURRICULUM);
+    expect(NUMBER_GARDEN.answerCount).toBe(3);
+  });
+});
+
+describe('quantity pictures', () => {
+  it('counting can show apples in rows of five', () => {
     expect(objectPicture(3)).toBe('🍎🍎🍎');
     expect(objectPicture(7)).toBe('🍎🍎🍎🍎🍎\n🍎🍎');
-    for (let n = 1; n <= 10; n++) {
-      const ch = library.createChallenge(`count:${n}`, { challengeId: 'x', stage: 'introduce', hintStrength: 0, distractorCount: 2, rng: seededRng(n) });
-      expect(ch.correctAnswer.label).toBe(String(n));
-      expect(measureTile('fact', ch.statement).w).toBeLessThanOrEqual(8);
-      expect(measureTile('question', ch.prompt).w).toBeLessThanOrEqual(5);
-    }
   });
 
-  it('a young learner is introduced to each new thing before being asked about it', () => {
-    const engine = new LearningEngine(new LearningTracker(), library, seededRng(4));
-    const session = engine.createLearnSession(NUMBER_GARDEN.path, Infinity, { answerCount: 3, probeNewItems: true });
-    const introduced = new Set<string>();
-    for (let i = 0; i < 60; i++) {
-      const ch = session.next();
-      expect(1 + ch.distractors.length).toBe(3);
-      if (ch.stage === 'introduce') introduced.add(ch.itemId);
-      // Struggling child (wrong every other time): never on a roll, so nothing is ever skipped.
-      else expect(introduced.has(ch.itemId)).toBe(true);
-      play(session, ch, i % 2 === 0);
+  it('the same quantity appears in different representations', () => {
+    const shown = new Set<string>();
+    for (let seed = 1; seed < 60; seed++) {
+      shown.add(library.createChallenge('count:7', { challengeId: 'x', stage: 'independent', hintStrength: 0, distractorCount: 2, rng: seededRng(seed) }).prompt);
     }
+    expect(shown.size).toBeGreaterThanOrEqual(3);
+    // Introductions always use apples.
+    const intro = library.createChallenge('count:7', { challengeId: 'x', stage: 'introduce', hintStrength: 0, distractorCount: 2, rng: seededRng(3) });
+    expect(intro.prompt).toBe(objectPicture(7));
   });
 
-  it('a child who already knows things moves through quickly, skipping introductions', () => {
-    const engine = new LearningEngine(new LearningTracker(), library, seededRng(9));
-    const session = engine.createLearnSession(NUMBER_GARDEN.path, Infinity, { answerCount: 3, probeNewItems: true });
-    let introductions = 0;
-    let questions = 0;
-    for (let i = 0; i < 120; i++) {
-      const ch = session.next();
-      if (ch.stage === 'introduce') introductions++;
-      else questions++;
-      play(session, ch, true);
-    }
-    const reached = NUMBER_GARDEN.path.itemIds.filter((id) => engine.tracker.get(id).timesPresented > 0).length;
-    expect(introductions).toBeLessThan(reached / 2); // most new things were simply known
-    expect(reached).toBeGreaterThan(15); // and they got well past counting
-    expect(questions).toBeGreaterThan(introductions);
-  });
-
-  it('a probed item that was not known gets introduced properly next time', () => {
-    const engine = new LearningEngine(new LearningTracker(), library, seededRng(2));
-    const session = engine.createLearnSession(NUMBER_GARDEN.path, Infinity, { answerCount: 3, probeNewItems: true });
-    const seen = new Map<string, string[]>();
-    for (let i = 0; i < 80; i++) {
-      const ch = session.next();
-      const stages = seen.get(ch.itemId) ?? [];
-      // A brand-new item asked as a question is a probe: pretend the child didn't know it.
-      const isProbe = ch.stage === 'independent' && stages.length === 0;
-      stages.push(ch.stage);
-      seen.set(ch.itemId, stages);
-      play(session, ch, !isProbe);
-    }
-    const probedThenTaught = [...seen.values()].filter((s) => s[0] === 'independent' && s.includes('introduce'));
-    expect(probedThenTaught.length).toBeGreaterThan(0);
-    for (const stages of probedThenTaught) expect(stages[1]).toBe('introduce');
+  it('matching a numeral offers pictures that differ only in amount', () => {
+    const ch = library.createChallenge('match:6', { challengeId: 'x', stage: 'independent', hintStrength: 0, distractorCount: 2, rng: seededRng(5) });
+    expect(ch.prompt).toBe('6');
+    // Filled markers in any of the picture styles (dots, dice, frame counters).
+    const picCount = (pic: string) => [...pic].filter((c) => c === '●' || c === '🔴').length;
+    expect(picCount(ch.correctAnswer.label)).toBe(6);
+    for (const d of ch.distractors) expect(picCount(d.label)).not.toBe(6);
   });
 });

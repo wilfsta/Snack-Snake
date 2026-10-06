@@ -3,6 +3,7 @@ import { GARDEN_PLANTS } from '../../rewards/catalog';
 import {
   affordableItems,
   award,
+  awardMilestones,
   balance,
   buy,
   equip,
@@ -41,6 +42,13 @@ export class RewardService {
     const result = award(this.current, stars, inGarden);
     this.set(result.state);
     return result.newPlants.map((i) => GARDEN_PLANTS[i]);
+  }
+
+  /** One-off reward for passing learning milestones. Returns stars paid and plants that grew. */
+  awardMilestones(ids: readonly string[], inGarden: boolean): { stars: number; newPlants: string[] } {
+    const result = awardMilestones(this.current, ids, inGarden);
+    if (result.stars > 0) this.set(result.state);
+    return { stars: result.stars, newPlants: result.newPlants.map((i) => GARDEN_PLANTS[i]) };
   }
 
   buy(itemId: string): BuyResult {

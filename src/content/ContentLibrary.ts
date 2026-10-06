@@ -2,6 +2,7 @@ import type { Challenge, ChallengeRequest, LearningContent, LearningUnit } from 
 import { ArithmeticContent } from './arithmetic/ArithmeticContent';
 import { OPERATIONS } from './arithmetic/operations';
 import { CountingContent } from './counting/CountingContent';
+import { NumberSenseContent } from './numberSense/NumberSenseContent';
 
 /** Combines several subjects into one LearningContent, routing by unit and item id. */
 export class ContentLibrary implements LearningContent {
@@ -38,5 +39,9 @@ export class ContentLibrary implements LearningContent {
 
 /** Every subject the game currently offers. */
 export function createContentLibrary(): ContentLibrary {
-  return new ContentLibrary([new CountingContent(), ...OPERATIONS.map((op) => new ArithmeticContent(op))]);
+  return new ContentLibrary([
+    new CountingContent(),
+    new NumberSenseContent(),
+    ...OPERATIONS.map((op) => new ArithmeticContent(op)),
+  ]);
 }

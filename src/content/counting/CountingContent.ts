@@ -1,5 +1,7 @@
+import { pick } from '../../core/random';
 import type { Challenge, ChallengeRequest, LearningContent, LearningUnit } from '../../learning/types';
 import { pickDistractors } from '../arithmetic/operations';
+import { quantityPicture, stylesFor } from '../numberSense/representations';
 
 export const MAX_COUNT = 10;
 const PER_ROW = 5;
@@ -53,7 +55,9 @@ export class CountingContent implements LearningContent {
     const n = parseCountItemId(itemId);
     if (n === null) throw new Error(`Not a counting item: ${itemId}`);
     const id = request.challengeId;
-    const prompt = objectPicture(n);
+    // Introductions use apples; questions vary the picture so "seven" is recognised in any form.
+    const style = request.stage === 'introduce' || request.rng.next() < 0.4 ? 'apples' : pick(request.rng, stylesFor(n));
+    const prompt = quantityPicture(n, style);
     const wrong = pickDistractors(
       n,
       [
@@ -78,7 +82,7 @@ export class CountingContent implements LearningContent {
       stage: request.stage,
       hintStrength: request.stage === 'guided' ? request.hintStrength : 0,
       teaching: { caption: 'Count them!', steps: Array.from({ length: n }, (_, i) => String(i + 1)) },
-      metadata: { n },
+      metadata: { n, style },
     };
   }
 }

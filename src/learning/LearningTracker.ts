@@ -8,6 +8,7 @@ import {
   type MasteryRecord,
   type MasteryState,
 } from './mastery';
+import { sanitizeCurriculumState, type CurriculumState } from './placement';
 
 export interface UnitProgress {
   /** How many items (in curriculum order) have been unlocked for learning. */
@@ -20,6 +21,8 @@ export interface LearningSnapshot {
   readonly step: number;
   readonly records: Readonly<Record<string, MasteryRecord>>;
   readonly units: Readonly<Record<string, UnitProgress>>;
+  /** Per-curriculum placement evidence (which skill groups are provisionally known). */
+  readonly curricula?: Readonly<Record<string, CurriculumState>>;
 }
 
 export type MasteryCounts = Record<MasteryState, number>;
@@ -31,6 +34,7 @@ export type MasteryCounts = Record<MasteryState, number>;
 export class LearningTracker {
   private readonly records = new Map<string, MasteryRecord>();
   private readonly units = new Map<string, UnitProgress>();
+  private readonly curricula = new Map<string, CurriculumState>();
   private step = 0;
   private readonly listeners = new Set<() => void>();
 
@@ -43,6 +47,7 @@ export class LearningTracker {
       this.step = clean.step;
       for (const [id, rec] of Object.entries(clean.records)) this.records.set(id, rec);
       for (const [id, unit] of Object.entries(clean.units)) this.units.set(id, unit);
+      for (const [id, state] of Object.entries(clean.curricula ?? {})) this.curricula.set(id, state);
     }
   }
 
@@ -85,6 +90,15 @@ export class LearningTracker {
     this.changed();
   }
 
+  curriculumState(curriculumId: string): CurriculumState {
+    return this.curricula.get(curriculumId) ?? { assumed: {} };
+  }
+
+  setCurriculumState(curriculumId: string, state: CurriculumState): void {
+    this.curricula.set(curriculumId, state);
+    this.changed();
+  }
+
   countStates(itemIds: readonly string[]): MasteryCounts {
     const counts: MasteryCounts = { NEW: 0, LEARNING: 0, PRACTISING: 0, MASTERED: 0 };
     for (const id of itemIds) counts[this.get(id).state]++;
@@ -97,6 +111,7 @@ export class LearningTracker {
       step: this.step,
       records: Object.fromEntries(this.records),
       units: Object.fromEntries(this.units),
+      curricula: Object.fromEntries(this.curricula),
     };
   }
 
@@ -130,7 +145,11 @@ export class LearningTracker {
         if (unlocked > 0) units[id] = { unlocked, sessionsCompleted };
       }
     }
+    const curricula: Record<string, CurriculumState> = {};
+    if (src.curricula && typeof src.curricula === 'object') {
+      for (const [id, state] of Object.entries(src.curricula as Record<string, unknown>)) curricula[id] = sanitizeCurriculumState(state);
+    }
     const step = typeof src.step === 'number' && Number.isFinite(src.step) ? Math.max(0, Math.floor(src.step)) : 0;
-    return { version: 1, step, records, units };
+    return { version: 1, step, records, units, curricula };
   }
 }

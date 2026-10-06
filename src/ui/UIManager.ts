@@ -986,7 +986,8 @@ export class UIManager {
     this.hudBestBox.hidden = view.mode === 'learn' || view.mode === 'garden';
     this.hudStreakBox.hidden = view.mode === 'classic' || view.mode === 'garden';
     this.hudStreakBox.classList.toggle('hot', view.streak >= 3);
-    this.hudQuestion.textContent = view.question ? `${view.question.replace(/\n/g, '')} = ?` : '';
+    // The game supplies the whole question, e.g. "6 × 4 = ?" or "3, 4, ?, 6".
+    this.hudQuestion.textContent = view.question ? view.question.replace(/\n/g, ' ') : '';
     this.hudQuestion.classList.toggle('visible', !!view.question);
 
     this.hudProgress.hidden = !view.progress;

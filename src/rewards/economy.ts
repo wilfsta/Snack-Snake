@@ -11,7 +11,19 @@ export interface RewardState {
   readonly gardenStars: number;
   readonly owned: readonly string[];
   readonly equipped: Readonly<Record<WardrobeSlot, string | null>>;
+  /** Learning milestones (e.g. skill groups) already rewarded, so each pays only once. */
+  readonly milestones: readonly string[];
 }
+
+/**
+ * Moving past a skill group, whether by learning it or by showing it was already known, pays a
+ * one-off milestone. Fast-tracked children are rewarded for real progress; a capped amount per
+ * event means a big leap is one celebration, not a shower of stars.
+ */
+export const MILESTONE_RULES = {
+  starsPerGroup: 3,
+  maxStarsPerEvent: 8,
+} as const;
 
 /** How many stars things are worth. Answering after a mistake still counts: effort is rewarded. */
 export const STAR_RULES = {
@@ -27,7 +39,22 @@ export function initialRewardState(): RewardState {
     gardenStars: 0,
     owned: [DEFAULT_SKIN_ID],
     equipped: { hat: null, face: null, skin: DEFAULT_SKIN_ID },
+    milestones: [],
   };
+}
+
+export interface MilestoneResult extends AwardResult {
+  readonly stars: number;
+}
+
+/** Pays for milestones not already paid. Re-passing a group (e.g. after it was reopened) pays nothing. */
+export function awardMilestones(state: RewardState, ids: readonly string[], inGarden: boolean): MilestoneResult {
+  const fresh = [...new Set(ids)].filter((id) => !state.milestones.includes(id));
+  if (fresh.length === 0) return { state, newPlants: [], stars: 0 };
+  const stars = Math.min(fresh.length * MILESTONE_RULES.starsPerGroup, MILESTONE_RULES.maxStarsPerEvent);
+  const paid: RewardState = { ...state, milestones: [...state.milestones, ...fresh] };
+  const result = award(paid, stars, inGarden);
+  return { ...result, stars };
 }
 
 export function balance(state: RewardState): number {
@@ -119,5 +146,6 @@ export function sanitizeRewardState(raw: unknown): RewardState {
     gardenStars: count(src.gardenStars),
     owned: [...owned],
     equipped: { hat: pick('hat'), face: pick('face'), skin: pick('skin') ?? DEFAULT_SKIN_ID },
+    milestones: Array.isArray(src.milestones) ? [...new Set(src.milestones.filter((m): m is string => typeof m === 'string'))] : [],
   };
 }

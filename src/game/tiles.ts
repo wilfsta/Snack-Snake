@@ -28,7 +28,12 @@ export interface Tile extends Rect {
  */
 export function textWidthUnits(line: string): number {
   let units = 0;
-  for (const ch of Array.from(line)) units += (ch.codePointAt(0) ?? 0) >= 0x1f000 ? 1.15 : 0.6;
+  for (const ch of Array.from(line)) {
+    const cp = ch.codePointAt(0) ?? 0;
+    // Emoji pictures (🍎 🔴) and symbol-emoji (⚪ ☝ ✌) are wide; variation selectors take no space.
+    if (cp === 0xfe0f) continue;
+    units += cp >= 0x1f000 || (cp >= 0x2600 && cp <= 0x27bf) ? 1.15 : 0.6;
+  }
   return units;
 }
 
