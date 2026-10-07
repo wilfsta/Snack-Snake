@@ -23,7 +23,7 @@ const indexOf = (id: string) => GROUPS.findIndex((g) => g.id === id);
 const BONDS_TO_5 = indexOf('bonds-to-5');
 const ADD_TO_10 = indexOf('add-to-10');
 const SUB_TO_20 = indexOf('sub-to-20');
-const FIRST_MULTIPLICATION = indexOf('equal-groups');
+const FIRST_MULTIPLICATION = indexOf('repeated-addition');
 
 /**
  * A simulated child. Groups they already know are always answered right; anything else is
@@ -137,7 +137,7 @@ describe('placement rules', () => {
 });
 
 describe('finding the edge of what a child knows', () => {
-  it('a beginner gets introductions and stays in early counting – no fast-tracking', () => {
+  it('a beginner gets introductions and stays at the start – no fast-tracking', () => {
     const engine = freshEngine(1);
     const log = play(engine, makeChild(() => false), 40);
     expect(log.filter((t) => t.stage === 'introduce').length).toBeGreaterThanOrEqual(4);

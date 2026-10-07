@@ -14,12 +14,12 @@ describe('Number Garden curriculum', () => {
     for (const world of WORLDS) expect(validateCurriculum(world.curriculum, (id) => library.ownsItem(id))).toEqual([]);
   });
 
-  it('goes from counting, through number sense, bonds, adding and taking away, to multiplication', () => {
-    expect(GARDEN_CURRICULUM.stages.map((s) => s.id)).toEqual(['quantity', 'number-sense', 'bonds', 'addition', 'subtraction', 'multiplication']);
+  it('goes from number sense, through bonds, adding and taking away, to multiplication', () => {
+    expect(GARDEN_CURRICULUM.stages.map((s) => s.id)).toEqual(['number-sense', 'bonds', 'addition', 'subtraction', 'multiplication']);
     const groups = curriculumGroups(GARDEN_CURRICULUM).map((g) => g.id);
-    expect(groups[0]).toBe('count-to-5');
+    expect(groups[0]).toBe('missing-number');
     // Concepts behind multiplication come before any times-table facts.
-    for (const idea of ['equal-groups', 'repeated-addition', 'count-in-2s', 'count-in-5s', 'count-in-10s', 'groups-to-times']) {
+    for (const idea of ['repeated-addition', 'count-in-2s', 'count-in-5s', 'count-in-10s', 'groups-to-times']) {
       expect(groups.indexOf(idea)).toBeGreaterThan(groups.indexOf('sub-to-20'));
       expect(groups.indexOf(idea)).toBeLessThan(groups.indexOf('times-2'));
     }
@@ -55,22 +55,21 @@ describe('Number Garden curriculum', () => {
     }
   });
 
-  it('questions never ask a child to count more than 5 objects while steering', () => {
-    const OBJECT = /🍎|●|🔴|🖐|☝|✌/gu;
+  it('only numerals and sums: no pictures, dots, frames or objects to count anywhere', () => {
+    // Anything that is not a digit, a maths symbol, a comma or a space.
+    const NOT_NUMERALS = /[^0-9+\-−×÷=?,\s]/u;
     let seed = 1;
     for (const id of curriculumItems(GARDEN_CURRICULUM)) {
-      for (let i = 0; i < 4; i++) {
-        const ch = library.createChallenge(id, { challengeId: 'x', stage: 'independent', hintStrength: 0, distractorCount: 2, rng: seededRng(seed++) });
-        const objects = (s: string) => (s.match(OBJECT) ?? []).length + (s.includes('🖐') ? 4 : 0);
-        expect(objects(ch.prompt), `${id}: ${ch.prompt}`).toBeLessThanOrEqual(5);
-        for (const option of [ch.correctAnswer, ...ch.distractors]) expect(objects(option.label), `${id} answer`).toBeLessThanOrEqual(5);
+      for (const stage of ['introduce', 'guided', 'independent'] as const) {
+        const ch = library.createChallenge(id, { challengeId: 'x', stage, hintStrength: 0.5, distractorCount: 2, rng: seededRng(seed++) });
+        const shown = [ch.prompt, ch.askAs ?? '', ch.statement, ch.correctAnswer.label, ...ch.distractors.map((d) => d.label), ...(ch.teaching?.steps ?? [])];
+        for (const text of shown) expect(NOT_NUMERALS.test(text), `${id}: "${text}"`).toBe(false);
       }
     }
   });
 
   it('keeps the old Garden item ids where they are still used, so earlier progress counts', () => {
     const items = new Set(curriculumItems(GARDEN_CURRICULUM));
-    for (let n = 1; n <= 5; n++) expect(items.has(`count:${n}`)).toBe(true);
     // Old path: adding 1..5 within 10.
     for (let add = 1; add <= 5; add++) for (let k = 1; k + add <= 10; k++) expect(items.has(`add:${add}+${k}`)).toBe(true);
   });

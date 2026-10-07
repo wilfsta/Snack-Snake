@@ -1,5 +1,4 @@
 import { ADDITION, MULTIPLICATION, SUBTRACTION } from '../content/arithmetic/operations';
-import { countItemId } from '../content/counting/CountingContent';
 import type { Curriculum, SkillGroup } from '../learning/curriculum';
 
 /**
@@ -45,19 +44,10 @@ export const GARDEN_CURRICULUM: Curriculum = {
   title: 'Number Garden',
   stages: [
     {
-      id: 'quantity',
-      title: 'Quantity and counting',
-      // Playtesting showed that counting big groups of objects while steering Sid is too much at
-      // once. Objects appear only in small numbers (up to 5); beyond that everything is numerals.
-      groups: [
-        group('count-to-5', 'Count small groups (up to 5)', range(1, 5).map(countItemId), ['count:3', 'count:5', 'count:4']),
-        group('numeral-match', 'Match numerals to small quantities', range(1, 5).map((n) => `match:${n}`), ['match:3', 'match:5', 'match:4']),
-        group('subitise', 'See small amounts without counting', range(1, 5).map((n) => `subit:${n}`), ['subit:4', 'subit:3', 'subit:5']),
-      ],
-    },
-    {
       id: 'number-sense',
       title: 'Number sense with numerals',
+      // Playtesting: counting objects while steering Sid is too much at once, and not every child can
+      // read. The Garden uses only numerals and sums – no pictures to count, no words to read.
       groups: [
         group('missing-number', 'Numbers in order to 10', range(1, 7).map((s) => `seq:${s}`), ['seq:2', 'seq:5', 'seq:7']),
         group('one-more', 'One more', range(1, 9).map((n) => `onemore:${n}`), ['onemore:4', 'onemore:8', 'onemore:6']),
@@ -94,7 +84,6 @@ export const GARDEN_CURRICULUM: Curriculum = {
       id: 'multiplication',
       title: 'Foundations of multiplication',
       groups: [
-        group('equal-groups', 'Equal groups', PAIRS.map(([g, s]) => `groups:${g}:${s}`)),
         group('repeated-addition', 'Repeated addition', PAIRS.map(([g, s]) => `repadd:${g}:${s}`)),
         group('count-in-2s', 'Counting in 2s', range(1, 6).map((p) => `skip:2:${p}`)),
         group('count-in-10s', 'Counting in 10s', range(1, 6).map((p) => `skip:10:${p}`)),

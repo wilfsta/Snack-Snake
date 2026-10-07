@@ -2,7 +2,7 @@ import { clamp } from '../../core/geometry';
 import type { Rng } from '../../core/random';
 import type { AnswerOption, Challenge, ChallengeRequest, LearningContent, LearningUnit, TeachingAid } from '../../learning/types';
 import { pickDistractors } from '../arithmetic/operations';
-import { framePicture, groupsPicture, quantityPicture, sharedStyle } from './representations';
+import { quantityPicture, sharedStyle } from './representations';
 
 /**
  * Early number sense and the ideas behind multiplication. Each item kind is a different
@@ -160,11 +160,10 @@ function build(kind: Kind, a: number, b: number, count: number, rng: Rng): Built
       const answer = more ? a + 1 : a - 1;
       // The question is numerals ("6 + 1"); a small picture only appears when it is first taught.
       const prompt = `${a} ${more ? '+' : '−'} 1`;
-      const taught = a <= 5 ? `${quantityPicture(a, 'apples')} ${more ? '+' : '−'} 🍎\n` : '';
       return {
         prompt,
         askAs: `${prompt} = ?`,
-        statement: `${taught}${prompt} = ${answer}`,
+        statement: `${prompt} = ${answer}`,
         correct: String(answer),
         wrong: nums(answer, [{ value: a, weight: 5 }, { value: more ? a + 2 : a - 2, weight: 3 }, { value: more ? a - 1 : a + 1, weight: 2 }], count, rng),
         teaching: { caption: more ? 'One more!' : 'One less!', steps: [String(a), String(answer)] },
@@ -194,7 +193,7 @@ function build(kind: Kind, a: number, b: number, count: number, rng: Rng): Built
       return {
         prompt,
         askAs: prompt,
-        statement: `${framePicture(part, t === 5 ? 5 : 10)}\n${part} + ${answer} = ${t}`,
+        statement: `${part} + ${answer} = ${t}`,
         correct: String(answer),
         wrong: nums(answer, [{ value: t, weight: 3 }, { value: part, weight: part !== answer ? 2 : 0 }, { value: answer + 1, weight: 4 }, { value: answer - 1, weight: 4 }], count, rng, false),
         teaching: { caption: `Fill it up to ${t}`, steps: [String(part), `+ ${answer}`, String(t)] },
@@ -210,7 +209,6 @@ function build(kind: Kind, a: number, b: number, count: number, rng: Rng): Built
       const sum = Array.from({ length: g }, () => String(s)).join(' + ');
       // Groups are shown as numbered bubbles (②②② = three groups of two): the idea of equal groups
       // without objects to count. The apple picture is only used when it is first taught.
-      const groupGlyphs = groupsPicture(1, s);
       const bubbles = Array.from({ length: g }, () => CIRCLED[s] ?? `(${s})`).join(' ');
       const prompt = kind === 'groups' ? bubbles : kind === 'repadd' ? sum : `${sum}\n= ${g} × ${s}`;
       return {
@@ -219,7 +217,7 @@ function build(kind: Kind, a: number, b: number, count: number, rng: Rng): Built
         statement: kind === 'groups' ? `${bubbles} = ${answer}` : kind === 'repadd' ? `${sum} = ${answer}` : `${sum} = ${g} × ${s} = ${answer}`,
         correct: String(answer),
         wrong: nums(answer, [{ value: g + s, weight: 3 }, { value: answer + s, weight: 3 }, { value: answer - s, weight: 3 }, { value: answer + 1, weight: 2 }, { value: answer - 1, weight: 2 }], count, rng),
-        teaching: { caption: `${g} groups of ${s}`, steps: range(1, g).map((i) => `${groupGlyphs} ${i * s}`) },
+        teaching: { caption: `${g} groups of ${s}`, steps: range(1, g).map((i) => String(i * s)) },
         difficulty: kind === 'groups' ? 0.55 : kind === 'repadd' ? 0.6 : 0.7,
       };
     }
