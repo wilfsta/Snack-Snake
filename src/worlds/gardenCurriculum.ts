@@ -47,21 +47,22 @@ export const GARDEN_CURRICULUM: Curriculum = {
     {
       id: 'quantity',
       title: 'Quantity and counting',
+      // Playtesting showed that counting big groups of objects while steering Sid is too much at
+      // once. Objects appear only in small numbers (up to 5); beyond that everything is numerals.
       groups: [
-        group('count-to-5', 'Count objects to 5', range(1, 5).map(countItemId), ['count:3', 'count:5', 'count:4']),
-        group('count-to-10', 'Count objects to 10', range(6, 10).map(countItemId), ['count:7', 'count:9', 'count:6']),
-        group('numeral-match', 'Match numerals to quantities', range(1, 10).map((n) => `match:${n}`), ['match:4', 'match:8', 'match:6']),
+        group('count-to-5', 'Count small groups (up to 5)', range(1, 5).map(countItemId), ['count:3', 'count:5', 'count:4']),
+        group('numeral-match', 'Match numerals to small quantities', range(1, 5).map((n) => `match:${n}`), ['match:3', 'match:5', 'match:4']),
+        group('subitise', 'See small amounts without counting', range(1, 5).map((n) => `subit:${n}`), ['subit:4', 'subit:3', 'subit:5']),
       ],
     },
     {
       id: 'number-sense',
-      title: 'Subitising and number sense',
+      title: 'Number sense with numerals',
       groups: [
-        group('subitise', 'See small amounts without counting', range(1, 9).map((n) => `subit:${n}`), ['subit:4', 'subit:7', 'subit:5']),
-        group('compare', 'More and fewer', [...range(3, 8).map((n) => `more:${n}`), ...range(1, 5).map((n) => `fewest:${n}`)], ['more:6', 'fewest:3', 'more:8']),
+        group('missing-number', 'Numbers in order to 10', range(1, 7).map((s) => `seq:${s}`), ['seq:2', 'seq:5', 'seq:7']),
+        group('compare', 'Biggest and smallest numbers', [...range(3, 8).map((n) => `more:${n}`), ...range(1, 5).map((n) => `fewest:${n}`)], ['more:6', 'fewest:3', 'more:8']),
         group('one-more', 'One more', range(1, 9).map((n) => `onemore:${n}`), ['onemore:4', 'onemore:8', 'onemore:6']),
         group('one-less', 'One less', range(2, 10).map((n) => `oneless:${n}`), ['oneless:5', 'oneless:9', 'oneless:7']),
-        group('missing-number', 'Missing numbers in a sequence', range(1, 7).map((s) => `seq:${s}`), ['seq:2', 'seq:5', 'seq:7']),
       ],
     },
     {

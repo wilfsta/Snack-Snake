@@ -26,6 +26,12 @@ export interface MasteryRecord {
   /** 0..100 */
   readonly masteryScore: number;
   readonly state: MasteryState;
+  /**
+   * Smoothed time (ms) from answers appearing to the first answer being collected, and the latest.
+   * Recorded for future adaptive pacing; not used to judge mastery (it includes steering Sid).
+   */
+  readonly responseMsAvg: number | null;
+  readonly lastResponseMs: number | null;
 }
 
 export const MASTERY_RULES = {
@@ -48,6 +54,8 @@ export interface AttemptInput {
   /** True if this was the first answer chosen for this challenge. */
   readonly firstTry: boolean;
   readonly hintStrength: number;
+  /** Time from answers appearing to this answer being collected, when known. */
+  readonly responseMs?: number;
 }
 
 export function createMasteryRecord(itemId: string): MasteryRecord {
@@ -66,6 +74,8 @@ export function createMasteryRecord(itemId: string): MasteryRecord {
     lastAttempted: null,
     lastSeenStep: -1,
     masteryScore: 0,
+    responseMsAvg: null,
+    lastResponseMs: null,
     state: 'NEW',
   };
 }
@@ -144,7 +154,18 @@ export function withAttempt(rec: MasteryRecord, attempt: AttemptInput, now: numb
     recent,
     lastAttempted: now,
     masteryScore: clamp(Math.round(score), 0, 100),
+    ...responseTiming(rec, attempt),
   });
+}
+
+/** Only first answers say anything about recall speed; later attempts are after a mistake. */
+function responseTiming(rec: MasteryRecord, attempt: AttemptInput): Pick<MasteryRecord, 'responseMsAvg' | 'lastResponseMs'> {
+  const ms = attempt.responseMs;
+  if (ms === undefined || !Number.isFinite(ms) || ms < 0 || !attempt.firstTry) {
+    return { responseMsAvg: rec.responseMsAvg, lastResponseMs: rec.lastResponseMs };
+  }
+  const avg = rec.responseMsAvg === null ? ms : Math.round(rec.responseMsAvg * 0.7 + ms * 0.3);
+  return { responseMsAvg: avg, lastResponseMs: Math.round(ms) };
 }
 
 /** Fraction of recent results that were right first time, or null if never attempted. */
@@ -182,6 +203,8 @@ export function sanitizeRecord(itemId: string, raw: unknown): MasteryRecord {
     lastAttempted,
     lastSeenStep: num('lastSeenStep', -1),
     masteryScore: clamp(num('masteryScore', 0), 0, 100),
+    responseMsAvg: typeof src.responseMsAvg === 'number' && src.responseMsAvg >= 0 ? src.responseMsAvg : null,
+    lastResponseMs: typeof src.lastResponseMs === 'number' && src.lastResponseMs >= 0 ? src.lastResponseMs : null,
     state,
   });
 }

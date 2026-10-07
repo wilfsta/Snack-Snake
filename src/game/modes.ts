@@ -23,6 +23,11 @@ export interface ModeRules {
   readonly minStepMs: number;
   /** Gentle speed-up per correct answer / food eaten. */
   readonly speedUpPerCorrectMs: number;
+  /**
+   * While a child is thinking about a collected question, Sid keeps moving but this many times
+   * more slowly: still Snake, but nothing rushes them.
+   */
+  readonly thinkingSlowdown: number;
 }
 
 /** Player-chosen options (from the Options menu). */
@@ -76,6 +81,7 @@ export function buildRules(mode: GameModeId, options: GameOptions = DEFAULT_OPTI
         baseStepMs: step,
         minStepMs: Math.round(step * 0.8),
         speedUpPerCorrectMs: 2,
+        thinkingSlowdown: 1.6,
       };
     case 'learn':
     case 'garden':
@@ -91,6 +97,7 @@ export function buildRules(mode: GameModeId, options: GameOptions = DEFAULT_OPTI
         baseStepMs: step + 30,
         minStepMs: step + 30,
         speedUpPerCorrectMs: 0,
+        thinkingSlowdown: 1.6,
       };
     case 'classic':
       return {
@@ -104,6 +111,7 @@ export function buildRules(mode: GameModeId, options: GameOptions = DEFAULT_OPTI
         baseStepMs: step,
         minStepMs: Math.round(step * 0.6),
         speedUpPerCorrectMs: 3,
+        thinkingSlowdown: 1,
       };
   }
 }

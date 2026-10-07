@@ -63,6 +63,7 @@ export abstract class BaseSession implements ChallengeSource {
           correct: event.correct,
           firstTry: event.attemptNumber === 1,
           hintStrength: event.hintStrength,
+          responseMs: event.responseMs,
         });
         break;
       case 'completed':

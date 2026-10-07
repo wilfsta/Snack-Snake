@@ -108,12 +108,14 @@ export class GameController {
     let source: QuestionSource | null = null;
     let warmupFood = 0;
     if (world) {
-      const visitsBefore = this.progress.visitWorld(world.id);
-      warmupFood = visitsBefore === 0 ? world.warmup.firstVisit : world.warmup.laterVisits;
+      this.progress.visitWorld(world.id);
+      // Starter apples only until a player has finished them once; returning players go straight to maths.
+      warmupFood = this.progress.isOnboarded(world.id) ? 0 : world.onboardingApples;
       source = engine.createCurriculumSession(world.curriculum, world.visitLength, {
         onStateChange,
         answerCount: world.answerCount,
         onGroupsPassed: (groupIds) => this.onGroupsPassed(groupIds),
+        pacing: world.pacing,
       });
     } else if (spec.mode === 'learn') {
       source = engine.createLearnSession(spec.unitId, LEARN_SESSION_LENGTH, { onStateChange, answerCount: options.answerCount });
@@ -358,6 +360,7 @@ export class GameController {
         this.audio.play('grow');
         break;
       case 'warmupComplete':
+        if (game.world) this.progress.markOnboarded(game.world.id);
         this.animator.say('Ooh! Numbers!', 1.6);
         this.audio.play('learnAchievement');
         break;
@@ -366,6 +369,9 @@ export class GameController {
         break;
       case 'sessionComplete':
         this.nav.sessionComplete();
+        break;
+      case 'thinking':
+        this.animator.say('Hmm…', Math.min(1.4, event.thinkMs / 1000));
         break;
       case 'challengePresented':
         break;
@@ -401,7 +407,7 @@ export class GameController {
       nearestTile: nearestTileOffset(session),
       hintOffset: hint ? offsetToTile(session, hint) : null,
       hintStrength: hint?.hint ?? 0,
-      answering: phase === 'answer' || phase === 'swallow' || phase === 'reaction',
+      answering: phase === 'think' || phase === 'answer' || phase === 'swallow' || phase === 'reaction',
       paused: frame.paused,
       streak: session.score.streak,
     });
@@ -417,7 +423,7 @@ export class GameController {
       animator: this.animator,
       effects: this.effects,
       skin: this.skin,
-      banner: this.readyBanner(session),
+      banner: this.readyBanner(session) ?? this.thinkingBanner(session),
       theme: game.world?.theme ?? 'sky',
       gardenPlants: game.world ? this.rewards.gardenPlants() : [],
     });
@@ -442,10 +448,23 @@ export class GameController {
   private hudQuestion(session: SnakeSession): string | null {
     const kind = session.phase.kind;
     const showing =
-      kind === 'swallow' || kind === 'answer' || kind === 'reaction' || (kind === 'dying' && session.phase.cause === 'wrong-answer');
+      kind === 'think' || kind === 'swallow' || kind === 'answer' || kind === 'reaction' || (kind === 'dying' && session.phase.cause === 'wrong-answer');
     const ch = session.challenge;
     if (!showing || !ch) return null;
     return ch.askAs ?? `${ch.prompt.replace(/\n/g, ' ')} = ?`;
+  }
+
+  /** While the child thinks, the question they collected stays big and clear on the board. */
+  private thinkingBanner(session: SnakeSession): { text: string; age: number; progress: number } | null {
+    const phase = session.phase;
+    if (phase.kind !== 'think' || !session.challenge) return null;
+    const total = phase.until - phase.startedAt;
+    const elapsed = session.time - phase.startedAt;
+    return {
+      text: session.challenge.prompt.replace(/\n/g, '  '),
+      age: elapsed / 1000,
+      progress: total > 0 ? Math.min(1, elapsed / total) : 1,
+    };
   }
 
   private readyBanner(session: SnakeSession): { text: string; age: number } | null {

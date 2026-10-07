@@ -16,6 +16,7 @@ import {
   type CurriculumState,
   type ExploreState,
 } from './placement';
+import { thinkingTimeFor, type PacingConfig } from './pacing';
 import { needsIntroduction, pickNextItem, planStage, shouldUnlockMore } from './selection';
 import type { Challenge, LearningContent } from './types';
 
@@ -25,6 +26,8 @@ export interface CurriculumHooks extends SessionHooks {
    * Each group is reported at most once per session; callers de-duplicate across sessions.
    */
   onGroupsPassed?: (groupIds: readonly string[]) => void;
+  /** When set, each question carries a thinking time (before answers appear) chosen from this. */
+  pacing?: PacingConfig;
 }
 
 export interface CurriculumDebugInfo {
@@ -173,7 +176,7 @@ export class CurriculumSession extends BaseSession {
       if (this.assumed(g)) return this.ask(this.pickProbeItem(g), 'independent', { kind: 'recheck', group: g });
     }
 
-    if (this.explore && this.probesAsked < MAX_PROBES_PER_SESSION) {
+    if (this.explore && this.explore.target < this.groups.length && this.probesAsked < MAX_PROBES_PER_SESSION) {
       const target = this.explore.target;
       // Already solid from earlier play: no need to ask, treat as answered.
       if (this.secure(target)) {
@@ -283,7 +286,10 @@ export class CurriculumSession extends BaseSession {
 
   private ask(itemId: string, stage: 'introduce' | 'guided' | 'independent', purpose: Purpose, hintStrength = 0): Challenge {
     this.askedThisSession.add(itemId);
-    const challenge = this.build(this.tracker.get(itemId), { stage, hintStrength: stage === 'guided' ? hintStrength : 0 });
+    const record = this.tracker.get(itemId);
+    const built = this.build(record, { stage, hintStrength: stage === 'guided' ? hintStrength : 0 });
+    // How long to let the child think before answers appear: more for new things, less for known ones.
+    const challenge = this.hooks.pacing ? { ...built, thinkingTimeMs: thinkingTimeFor(record, stage, this.hooks.pacing) } : built;
     this.purposes.set(challenge.id, purpose);
     this.log.push({ challengeId: challenge.id, kind: purpose.kind, groupId: this.groups[purpose.group].id, itemId, stage, result: null });
     if (this.log.length > 12) this.log.shift();
@@ -419,7 +425,8 @@ export class CurriculumSession extends BaseSession {
       return;
     }
     // Flying through? Look further ahead again (not too often).
-    if (confidenceFrom(this.results) === 'strong' && this.streak >= 4 && this.completed - this.lastExploreAt >= 6 && this.probesAsked < MAX_PROBES_PER_SESSION) {
+    // Only look ahead while there is somewhere left to go.
+    if (this.frontier < this.groups.length && confidenceFrom(this.results) === 'strong' && this.streak >= 4 && this.completed - this.lastExploreAt >= 6 && this.probesAsked < MAX_PROBES_PER_SESSION) {
       this.explore = startExplore(this.frontier, this.groups.length);
       this.lastExploreAt = this.completed;
     }

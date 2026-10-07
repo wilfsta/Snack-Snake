@@ -10,6 +10,7 @@ import { curriculumGroups } from './curriculum';
 import type { CurriculumSession } from './CurriculumSession';
 import { LearningEngine } from './LearningEngine';
 import { LearningTracker } from './LearningTracker';
+import { DEFAULT_PACING } from './pacing';
 import { confidenceFrom, exploreStep, groupSecure, probesNeeded, startExplore } from './placement';
 import type { ChallengeStage } from './types';
 
@@ -161,14 +162,15 @@ describe('finding the edge of what a child knows', () => {
   it('mixed ability: fast-tracks counting and number sense, settles and is taught at number bonds', () => {
     const engine = freshEngine(3);
     const log = play(engine, makeChild((g) => g < BONDS_TO_5), 40);
-    const settledAt = log.findIndex((t) => t.frontierAfter === BONDS_TO_5);
-    expect(settledAt).toBeGreaterThanOrEqual(0);
+    // Settled = the search is over and teaching starts at bonds (the edge can pass through bonds
+    // earlier while the engine is still checking whether it lies higher).
+    const settledAt = log.findIndex((t) => t.stage === 'introduce');
+    expect(log[settledAt].group).toBe(BONDS_TO_5);
     expect(settledAt + 1).toBeLessThanOrEqual(12);
-    const afterSettling = log.slice(settledAt + 1);
-    // Teaching happens at bonds...
-    expect(afterSettling.some((t) => t.stage === 'introduce' && t.group === BONDS_TO_5)).toBe(true);
+    // Nothing was taught before then: counting and number sense were fast-tracked.
+    expect(log.slice(0, settledAt).every((t) => t.stage === 'independent')).toBe(true);
     // ...and nothing much harder is attempted while bonds are being learnt.
-    expect(afterSettling.every((t) => t.group <= BONDS_TO_5 + 1)).toBe(true);
+    expect(log.slice(settledAt).every((t) => t.group <= BONDS_TO_5 + 1)).toBe(true);
   });
 
   it('an advanced child reaches the foundations of multiplication without doing every earlier fact', () => {
@@ -231,6 +233,18 @@ describe('finding the edge of what a child knows', () => {
     const learner = freshEngine(11);
     const long = play(learner, makeChild(() => false), 2500);
     expect(long[long.length - 1].frontierAfter).toBe(GROUPS.length);
+  });
+});
+
+describe('thinking time', () => {
+  it('each Garden question carries a thinking time from how well the child knows it', () => {
+    const tracker = new LearningTracker();
+    const engine = freshEngine(15, tracker);
+    const paced = engine.createCurriculumSession(GARDEN_CURRICULUM, 12, { answerCount: 3, pacing: DEFAULT_PACING });
+    const first = paced.next();
+    expect(first.thinkingTimeMs).toBe(DEFAULT_PACING.thinkingMs.new);
+    // Without a pacing config (other modes), answers appear straight away.
+    expect(engine.createCurriculumSession(GARDEN_CURRICULUM, 12).next().thinkingTimeMs).toBeUndefined();
   });
 });
 

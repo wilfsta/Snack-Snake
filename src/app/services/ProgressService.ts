@@ -33,7 +33,10 @@ export class ProgressService {
     tracker.onChange(() =>
       this.storage.update((d) => {
         const owner = d.profiles.find((p) => p.id === profileId);
-        if (owner) owner.learning = tracker.snapshot();
+        if (owner) {
+          owner.learning = tracker.snapshot();
+          owner.updatedAt = Date.now();
+        }
       }),
     );
     this.currentTracker = tracker;
@@ -61,6 +64,16 @@ export class ProgressService {
     const before = this.storage.profile.worldVisits[worldId] ?? 0;
     this.storage.updateProfile((p) => (p.worldVisits[worldId] = before + 1));
     return before;
+  }
+
+  /** Has this player finished the starter apples in this world? */
+  isOnboarded(worldId: string): boolean {
+    return this.storage.profile.onboarded.includes(worldId);
+  }
+
+  markOnboarded(worldId: string): void {
+    if (this.isOnboarded(worldId)) return;
+    this.storage.updateProfile((p) => p.onboarded.push(worldId), true);
   }
 
   flush(): void {

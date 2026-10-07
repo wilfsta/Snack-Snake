@@ -55,11 +55,15 @@ export interface ProfileData {
   name: string;
   avatar: string;
   createdAt: number;
+  /** Last change to this profile (for future cloud sync: newest wins / conflict detection). */
+  updatedAt: number;
   settings: ProfileSettings;
   highScores: Record<string, number>;
   bestStreaks: Record<string, number>;
   /** Times each world has been entered. */
   worldVisits: Record<string, number>;
+  /** Worlds whose first-time onboarding (starter apples) this player has finished. */
+  onboarded: string[];
   /** Opaque to storage; the rewards module validates its own state (stars, wardrobe). */
   rewards: unknown;
   /** Opaque to storage; the learning module validates its own snapshot. */
@@ -87,10 +91,12 @@ export function newProfile(id: string, name: string, avatar: string, createdAt =
     name: name.trim().slice(0, MAX_NAME_LENGTH),
     avatar,
     createdAt,
+    updatedAt: createdAt,
     settings: defaultProfileSettings(),
     highScores: {},
     bestStreaks: {},
     worldVisits: {},
+    onboarded: [],
     rewards: null,
     learning: null,
   };
@@ -131,7 +137,7 @@ function parseDevice(raw: unknown): DeviceSettings {
 }
 
 /** Builds a profile from saved data; `fallbackId` is used when the id is missing or a duplicate. */
-function parseProfile(raw: Record<string, unknown>, fallbackId: string): ProfileData {
+export function parseProfile(raw: Record<string, unknown>, fallbackId: string): ProfileData {
   const id = typeof raw.id === 'string' && raw.id ? raw.id : fallbackId;
   const name = typeof raw.name === 'string' ? raw.name : '';
   const avatar = typeof raw.avatar === 'string' && raw.avatar ? raw.avatar : DEFAULT_AVATAR;
@@ -142,6 +148,11 @@ function parseProfile(raw: Record<string, unknown>, fallbackId: string): Profile
     highScores: numberRecord(raw.highScores),
     bestStreaks: numberRecord(raw.bestStreaks),
     worldVisits: numberRecord(raw.worldVisits),
+    // Players who had already been into a world before this flag existed have seen the apples.
+    onboarded: Array.isArray(raw.onboarded)
+      ? raw.onboarded.filter((w): w is string => typeof w === 'string')
+      : Object.entries(numberRecord(raw.worldVisits)).filter(([, n]) => n > 0).map(([w]) => w),
+    updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : createdAt,
     rewards: raw.rewards ?? null,
     learning: raw.learning ?? null,
   };
@@ -228,6 +239,7 @@ export class StorageManager {
     this.update((d) => {
       const profile = d.profiles.find((p) => p.id === d.activeProfileId) ?? d.profiles[0];
       mutate(profile);
+      profile.updatedAt = Date.now();
     }, immediate);
   }
 

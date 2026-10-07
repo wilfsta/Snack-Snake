@@ -15,6 +15,7 @@ export type DeathCause = 'wrong-answer' | 'self' | 'wall' | 'arena-full';
  * The in-game state machine. Exactly one phase is active at a time:
  *  ready      "Ready… Go!" countdown, snake waiting
  *  seek       PLAYING: one question (or fact) tile in the arena
+ *  think      question collected; Sid keeps moving slowly while the child recalls the answer
  *  swallow    question just eaten; snake pauses to chew while answers pop in
  *  answer     ANSWER_MODE: five answers in the arena
  *  reaction   Learn mode: wrong answer spat out, short funny pause, then back to answer
@@ -27,6 +28,7 @@ export type DeathCause = 'wrong-answer' | 'self' | 'wall' | 'arena-full';
 export type SessionPhase =
   | { readonly kind: 'ready'; readonly until: number }
   | { readonly kind: 'seek' }
+  | { readonly kind: 'think'; readonly until: number; readonly startedAt: number }
   | { readonly kind: 'swallow'; readonly until: number }
   | { readonly kind: 'answer' }
   | { readonly kind: 'reaction'; readonly until: number }
@@ -51,6 +53,7 @@ export interface GameOverInfo {
 export type SessionEvent =
   | { readonly type: 'challengePresented'; readonly challenge: Challenge }
   | { readonly type: 'questionEaten'; readonly challenge: Challenge; readonly tile: Tile }
+  | { readonly type: 'thinking'; readonly challenge: Challenge; readonly thinkMs: number }
   | { readonly type: 'answersShown'; readonly challenge: Challenge }
   | { readonly type: 'factCollected'; readonly challenge: Challenge; readonly tile: Tile }
   | {
@@ -74,6 +77,8 @@ export const SESSION_TIMING = {
   readyMs: 1400,
   /** Snake pauses while chewing the question so children can read the answers calmly. */
   swallowMs: 900,
+  /** After a thinking moment the answers only need a short settle before Sid moves on. */
+  swallowAfterThinkingMs: 500,
   answerStaggerMs: 90,
   reactionMs: 1050,
   transitionMs: 650,
@@ -139,6 +144,8 @@ export class SnakeSession implements SnakeWorld {
   private attempts = 0;
   private nextTileId = 1;
   private lastWrongLabel: string | null = null;
+  /** Session time the current answer choices appeared (for response times). */
+  private answersShownAt = 0;
   private warmupLeft: number;
   private readonly source: ChallengeSource;
   private readonly rng: Rng;
@@ -181,7 +188,9 @@ export class SnakeSession implements SnakeWorld {
 
   get stepMs(): number {
     const r = this.rules;
-    return Math.max(r.minStepMs, r.baseStepMs - this.score.correct * r.speedUpPerCorrectMs);
+    const step = Math.max(r.minStepMs, r.baseStepMs - this.score.correct * r.speedUpPerCorrectMs);
+    // (The phase is not set yet while the constructor first asks for the step.)
+    return this.currentPhase?.kind === 'think' ? step * r.thinkingSlowdown : step;
   }
 
   /** True while still eating warm-up apples (no questions yet). */
@@ -191,7 +200,7 @@ export class SnakeSession implements SnakeWorld {
 
   get isMoving(): boolean {
     const k = this.currentPhase.kind;
-    return k === 'seek' || k === 'answer' || k === 'transition';
+    return k === 'seek' || k === 'think' || k === 'answer' || k === 'transition';
   }
 
   get isFinished(): boolean {
@@ -247,6 +256,9 @@ export class SnakeSession implements SnakeWorld {
     switch (phase.kind) {
       case 'ready':
         this.currentPhase = { kind: 'seek' };
+        break;
+      case 'think':
+        if (this.currentChallenge) this.showAnswers(this.currentChallenge, SESSION_TIMING.swallowAfterThinkingMs);
         break;
       case 'swallow':
       case 'reaction':
@@ -331,13 +343,22 @@ export class SnakeSession implements SnakeWorld {
     const challenge = this.currentChallenge;
     if (!challenge) return;
     switch (tile.kind) {
-      case 'question':
+      case 'question': {
         this.removeTile(tile);
         this.emit({ type: 'questionEaten', challenge, tile });
-        if (!this.spawnAnswers(challenge)) return;
-        this.currentPhase = { kind: 'swallow', until: this.clock + SESSION_TIMING.swallowMs };
-        this.emit({ type: 'answersShown', challenge });
+        const thinkMs = challenge.thinkingTimeMs ?? 0;
+        if (thinkMs > 0) {
+          // Thinking moment: the question stays on screen, nothing else is on the board and Sid
+          // slows down. Keep the visual position continuous as the step time stretches.
+          this.tileList = [];
+          this.moveClock *= this.rules.thinkingSlowdown;
+          this.currentPhase = { kind: 'think', until: this.clock + thinkMs, startedAt: this.clock };
+          this.emit({ type: 'thinking', challenge, thinkMs });
+          break;
+        }
+        this.showAnswers(challenge, SESSION_TIMING.swallowMs);
         break;
+      }
       case 'fact':
         this.removeTile(tile);
         this.snake.grow(this.rules.growthPerCorrect);
@@ -362,6 +383,7 @@ export class SnakeSession implements SnakeWorld {
       correct: tile.isCorrect,
       attemptNumber: this.attempts,
       hintStrength: correctTile?.hint ?? 0,
+      responseMs: Math.max(0, this.clock - this.answersShownAt),
     });
 
     if (tile.isCorrect) {
@@ -431,6 +453,14 @@ export class SnakeSession implements SnakeWorld {
     if (!rects) return false;
     this.tileList = [this.makeTile('food', rects[0], '', null, false, 0)];
     return true;
+  }
+
+  /** Puts the answer choices on the board, with a short settle so they can be read. */
+  private showAnswers(challenge: Challenge, settleMs: number): void {
+    if (!this.spawnAnswers(challenge)) return;
+    this.answersShownAt = this.clock;
+    this.currentPhase = { kind: 'swallow', until: this.clock + settleMs };
+    this.emit({ type: 'answersShown', challenge });
   }
 
   private spawnAnswers(challenge: Challenge): boolean {

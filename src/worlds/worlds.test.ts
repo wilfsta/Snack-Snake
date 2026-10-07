@@ -43,9 +43,22 @@ describe('Number Garden curriculum', () => {
     }
   });
 
-  it('keeps the old Garden item ids, so earlier progress still counts', () => {
+  it('questions never ask a child to count more than 5 objects while steering', () => {
+    const OBJECT = /🍎|●|🔴|🖐|☝|✌/gu;
+    let seed = 1;
+    for (const id of curriculumItems(GARDEN_CURRICULUM)) {
+      for (let i = 0; i < 4; i++) {
+        const ch = library.createChallenge(id, { challengeId: 'x', stage: 'independent', hintStrength: 0, distractorCount: 2, rng: seededRng(seed++) });
+        const objects = (s: string) => (s.match(OBJECT) ?? []).length + (s.includes('🖐') ? 4 : 0);
+        expect(objects(ch.prompt), `${id}: ${ch.prompt}`).toBeLessThanOrEqual(5);
+        for (const option of [ch.correctAnswer, ...ch.distractors]) expect(objects(option.label), `${id} answer`).toBeLessThanOrEqual(5);
+      }
+    }
+  });
+
+  it('keeps the old Garden item ids where they are still used, so earlier progress counts', () => {
     const items = new Set(curriculumItems(GARDEN_CURRICULUM));
-    for (let n = 1; n <= 10; n++) expect(items.has(`count:${n}`)).toBe(true);
+    for (let n = 1; n <= 5; n++) expect(items.has(`count:${n}`)).toBe(true);
     // Old path: adding 1..5 within 10.
     for (let add = 1; add <= 5; add++) for (let k = 1; k + add <= 10; k++) expect(items.has(`add:${add}+${k}`)).toBe(true);
   });

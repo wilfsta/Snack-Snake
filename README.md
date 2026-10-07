@@ -2,6 +2,8 @@
 
 A funny Snake game where you gobble the right answers. Start in the **Number Garden** (ages 5+: a journey from counting, through number sense, number bonds, adding and taking away, to the foundations of multiplication. It quietly finds what each child already knows and starts there – no tests, nothing can go wrong; earn ⭐ stars to grow your garden and dress Sid in hats, glasses and patterns), or pick times tables, adding, taking away or dividing, or Classic (original rules).
 
+**How a Garden question works:** collect the question → Sid keeps moving slowly while the child thinks (the question stays big on screen) → the answers appear → collect the right one. Thinking time is set per fact (more for new things, less for well-known ones) in `src/learning/pacing.ts`. A brand-new player first eats 5 plain apples to learn the controls; returning players go straight to maths. Classic Snake is apples only.
+
 **Players**: up to 6 children can each have their own Sid, stars, garden, learning progress and options (tap the player chip on the menu). Saves from before profiles become Player 1.
 
 **Options** (main menu or pause): snake speed, wrap-around vs deadly walls, and how many answers appear (2–6, fewer = easier).

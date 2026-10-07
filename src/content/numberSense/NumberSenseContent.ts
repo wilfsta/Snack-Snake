@@ -72,6 +72,9 @@ function inRange(kind: Kind, a: number, b: number): boolean {
   }
 }
 
+/** Circled numerals used to show "a group of n". */
+const CIRCLED: Readonly<Record<number, string>> = { 1: '①', 2: '②', 3: '③', 4: '④', 5: '⑤' };
+
 const nums = (correct: number, candidates: readonly { value: number; weight: number }[], count: number, rng: Rng, allowZero = false) =>
   pickDistractors(correct, candidates, count, rng, allowZero).map(String);
 
@@ -106,7 +109,8 @@ function nearbyQuantities(n: number, count: number, max: number, rng: Rng): numb
 function build(kind: Kind, a: number, b: number, count: number, rng: Rng): Built {
   switch (kind) {
     case 'match': {
-      const wrongQty = nearbyQuantities(a, count, 10, rng);
+      // Picture answers stay small (at most 5, or the number itself) so nothing needs counting while steering.
+      const wrongQty = nearbyQuantities(a, count, Math.max(5, a), rng);
       const pics = pictureChoices(rng, a, wrongQty);
       return {
         prompt: String(a),
@@ -136,14 +140,17 @@ function build(kind: Kind, a: number, b: number, count: number, rng: Rng): Built
         ? pickDistractors(a, range(1, a - 1).map((v) => ({ value: v, weight: v >= a - 3 ? 3 : 1 })), Math.min(count, a - 1), rng)
         : pickDistractors(a, range(a + 1, Math.min(10, a + 5)).map((v) => ({ value: v, weight: v <= a + 3 ? 3 : 1 })), count, rng);
       const valid = others.filter((q) => q >= 1 && q <= 10 && q !== a);
-      const pics = pictureChoices(rng, a, valid);
+      // Compared as numerals: no piles of objects to count while steering.
       return {
-        prompt: most ? 'Most 🍎?' : 'Fewest 🍎?',
-        askAs: most ? 'Which has the most?' : 'Which has the fewest?',
-        statement: `${pics.correct}\n${most ? 'is the most!' : 'is the fewest!'}`,
-        correct: pics.correct,
-        wrong: pics.wrong,
-        teaching: { caption: most ? 'The biggest group is the most' : 'The smallest group is the fewest', steps: [] },
+        prompt: most ? 'Biggest?' : 'Smallest?',
+        askAs: most ? 'Which number is biggest?' : 'Which number is smallest?',
+        statement: most ? `${a} is the biggest!` : `${a} is the smallest!`,
+        correct: String(a),
+        wrong: valid.map(String),
+        teaching: {
+          caption: most ? 'Bigger numbers come later when we count' : 'Smaller numbers come earlier when we count',
+          steps: [...valid, a].sort((x, y) => x - y).map(String),
+        },
         difficulty: 0.2,
       };
     }
@@ -151,11 +158,13 @@ function build(kind: Kind, a: number, b: number, count: number, rng: Rng): Built
     case 'oneless': {
       const more = kind === 'onemore';
       const answer = more ? a + 1 : a - 1;
-      const pic = quantityPicture(a, 'apples');
-      const prompt = `${pic} ${more ? '+' : '−'} 🍎`;
+      // The question is numerals ("6 + 1"); a small picture only appears when it is first taught.
+      const prompt = `${a} ${more ? '+' : '−'} 1`;
+      const taught = a <= 5 ? `${quantityPicture(a, 'apples')} ${more ? '+' : '−'} 🍎\n` : '';
       return {
         prompt,
-        statement: `${prompt} = ${answer}`,
+        askAs: `${prompt} = ?`,
+        statement: `${taught}${prompt} = ${answer}`,
         correct: String(answer),
         wrong: nums(answer, [{ value: a, weight: 5 }, { value: more ? a + 2 : a - 2, weight: 3 }, { value: more ? a - 1 : a + 1, weight: 2 }], count, rng),
         teaching: { caption: more ? 'One more!' : 'One less!', steps: [String(a), String(answer)] },
@@ -199,15 +208,18 @@ function build(kind: Kind, a: number, b: number, count: number, rng: Rng): Built
       const s = b;
       const answer = g * s;
       const sum = Array.from({ length: g }, () => String(s)).join(' + ');
-      const picture = groupsPicture(g, s);
-      const prompt = kind === 'groups' ? picture : kind === 'repadd' ? sum : `${sum}\n= ${g} × ${s}`;
+      // Groups are shown as numbered bubbles (②②② = three groups of two): the idea of equal groups
+      // without objects to count. The apple picture is only used when it is first taught.
+      const groupGlyphs = groupsPicture(1, s);
+      const bubbles = Array.from({ length: g }, () => CIRCLED[s] ?? `(${s})`).join(' ');
+      const prompt = kind === 'groups' ? bubbles : kind === 'repadd' ? sum : `${sum}\n= ${g} × ${s}`;
       return {
         prompt,
-        askAs: kind === 'link' ? `${g} × ${s} = ?` : undefined,
-        statement: kind === 'groups' ? `${picture} = ${answer}` : kind === 'repadd' ? `${sum} = ${answer}` : `${sum} = ${g} × ${s} = ${answer}`,
+        askAs: kind === 'link' ? `${g} × ${s} = ?` : kind === 'groups' ? `${bubbles} = ?` : undefined,
+        statement: kind === 'groups' ? `${bubbles} = ${answer}` : kind === 'repadd' ? `${sum} = ${answer}` : `${sum} = ${g} × ${s} = ${answer}`,
         correct: String(answer),
         wrong: nums(answer, [{ value: g + s, weight: 3 }, { value: answer + s, weight: 3 }, { value: answer - s, weight: 3 }, { value: answer + 1, weight: 2 }, { value: answer - 1, weight: 2 }], count, rng),
-        teaching: { caption: `${g} groups of ${s}`, steps: range(1, g).map((i) => String(i * s)) },
+        teaching: { caption: `${g} groups of ${s}`, steps: range(1, g).map((i) => `${groupGlyphs} ${i * s}`) },
         difficulty: kind === 'groups' ? 0.55 : kind === 'repadd' ? 0.6 : 0.7,
       };
     }

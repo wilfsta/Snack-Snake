@@ -15,7 +15,7 @@ export interface SceneOptions {
   readonly effects: Effects;
   readonly skin: SnakeSkin;
   /** Large centred caption, e.g. "Ready?" / "Go!". */
-  readonly banner?: { readonly text: string; readonly age: number } | null;
+  readonly banner?: { readonly text: string; readonly age: number; /** 0..1 shows a gentle progress bar (e.g. thinking time). */ readonly progress?: number } | null;
   readonly theme?: ArenaThemeId;
   /** Plants the child has grown; drawn softly on the board in worlds that grow. */
   readonly gardenPlants?: readonly string[];
@@ -77,19 +77,29 @@ export class GameRenderer {
     this.snakeRenderer.draw(ctx, layout, world.arena, world.snake, world.moveProgress, animator, skin);
     effects.draw(ctx, layout);
     this.snakeRenderer.drawOverlays(ctx, layout, animator);
-    if (scene.banner) this.drawBanner(layout, scene.banner.text, scene.banner.age);
+    if (scene.banner) this.drawBanner(layout, scene.banner.text, scene.banner.age, scene.banner.progress);
   }
 
-  private drawBanner(layout: Layout, text: string, age: number): void {
+  private drawBanner(layout: Layout, text: string, age: number, progress?: number): void {
     const { ctx } = this;
     const c = layout.cell;
     const scale = easeOutBack(clamp(age / 0.35, 0, 1));
-    const size = Math.max(28, c * 2.2) * scale;
+    // Thinking banners (with a progress bar) are a little smaller and see-through so Sid stays visible.
+    const thinking = progress !== undefined;
+    let size = Math.max(thinking ? 24 : 28, c * (thinking ? 1.6 : 2.2)) * scale;
     if (size <= 1) return;
     const x = layout.ox + (layout.cols * c) / 2;
-    const y = layout.oy + (layout.rows * c) * 0.3;
+    const y = layout.oy + (layout.rows * c) * (thinking ? 0.22 : 0.3);
     ctx.save();
+    if (thinking) ctx.globalAlpha = 0.88;
     ctx.font = `700 ${size}px ${FONT_STACK}`;
+    // Long questions shrink to fit the board.
+    const maxW = layout.cols * c * 0.9;
+    const w = ctx.measureText(text).width;
+    if (w > maxW) {
+      size *= maxW / w;
+      ctx.font = `700 ${size}px ${FONT_STACK}`;
+    }
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
@@ -98,6 +108,21 @@ export class GameRenderer {
     ctx.strokeText(text, x, y);
     ctx.fillStyle = '#ffd54a';
     ctx.fillText(text, x, y);
+    if (progress !== undefined) {
+      // A soft bar filling up: answers are on their way. Not a countdown, nothing runs out.
+      const bw = Math.min(layout.cols * c * 0.5, size * 4);
+      const bh = Math.max(6, c * 0.22);
+      const bx = x - bw / 2;
+      const by = y + size * 0.75;
+      ctx.fillStyle = 'rgba(43, 45, 92, 0.35)';
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw, bh, bh / 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.roundRect(bx, by, Math.max(bh, bw * clamp(progress, 0, 1)), bh, bh / 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 }

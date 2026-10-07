@@ -3,6 +3,7 @@ import { ProfileService } from '../app/services/ProfileService';
 import { ProgressService } from '../app/services/ProgressService';
 import { RewardService } from '../app/services/RewardService';
 import { LearningTracker } from '../learning/LearningTracker';
+import { fromSyncRecord, toSyncRecord } from './profileSync';
 import { MemoryStore, parseSaveData, SAVE_KEY, StorageManager } from './StorageManager';
 
 describe('StorageManager', () => {
@@ -81,6 +82,69 @@ describe('StorageManager', () => {
     expect(odd.activeProfileId).toBe('a');
     expect(odd.profiles[0].highScores).toEqual({ b: 10 });
     expect(parseSaveData(JSON.stringify({ version: 2, profiles: [] })).profiles).toHaveLength(1);
+  });
+});
+
+describe('onboarding, sync shape and resuming', () => {
+  it('players who had already visited a world are not sent back through the starter apples', () => {
+    const v1 = parseSaveData(JSON.stringify({ version: 1, worldVisits: { garden: 2 } }));
+    expect(v1.profiles[0].onboarded).toEqual(['garden']);
+    const v2 = parseSaveData(JSON.stringify({ version: 2, profiles: [{ id: 'a', worldVisits: { garden: 1 } }, { id: 'b' }] }));
+    expect(v2.profiles.map((p) => p.onboarded)).toEqual([['garden'], []]);
+  });
+
+  it('onboarding is remembered per player and survives a reload', () => {
+    const store = new MemoryStore();
+    const storage = new StorageManager(store);
+    const profiles = new ProfileService(storage);
+    const progress = new ProgressService(storage);
+    expect(progress.isOnboarded('garden')).toBe(false);
+    progress.markOnboarded('garden');
+    expect(progress.isOnboarded('garden')).toBe(true);
+    const first = profiles.activeId;
+    profiles.create('New', '🐸');
+    expect(progress.isOnboarded('garden')).toBe(false); // a new child still gets the apples
+    profiles.switchTo(first);
+    storage.flush();
+    const reopened = new ProgressService(new StorageManager(store));
+    expect(reopened.isOnboarded('garden')).toBe(true);
+  });
+
+  it('a returning child resumes their learning exactly where they left off', () => {
+    const store = new MemoryStore();
+    const storage = new StorageManager(store);
+    const progress = new ProgressService(storage);
+    progress.tracker.recordAttempt('count:3', { kind: 'independent', correct: true, firstTry: true, hintStrength: 0, responseMs: 2500 });
+    progress.tracker.setCurriculumState('garden', { assumed: { 'count-to-5': { how: 'probe', since: 1, confirms: 1, doubts: 0 } } });
+    storage.flush(); // the game saves when the page is hidden or closed
+    const reopened = new ProgressService(new StorageManager(store));
+    expect(reopened.tracker.get('count:3')).toMatchObject({ independentCorrect: 1, lastResponseMs: 2500 });
+    expect(reopened.tracker.curriculumState('garden').assumed['count-to-5']).toMatchObject({ how: 'probe', confirms: 1 });
+  });
+
+  it('every change stamps the player with a last-updated time', () => {
+    const storage = new StorageManager(new MemoryStore());
+    const before = storage.profile.updatedAt;
+    vi.setSystemTime(before + 5000);
+    storage.updateProfile((p) => (p.highScores.x = 1));
+    expect(storage.profile.updatedAt).toBe(before + 5000);
+  });
+
+  it('a profile converts to and from the cloud-sync shape without losing anything', () => {
+    const storage = new StorageManager(new MemoryStore());
+    storage.updateProfile((p) => {
+      p.name = 'Mo';
+      p.highScores['play:x'] = 50;
+      p.onboarded.push('garden');
+      p.rewards = { starsEarned: 9 };
+      p.learning = { version: 1, step: 2, records: {}, units: {} };
+    });
+    const record = toSyncRecord(storage.profile);
+    expect(record).toMatchObject({ schema: 1, id: storage.profile.id, name: 'Mo', game: { onboarded: ['garden'] } });
+    expect(Object.keys(record.game).sort()).toEqual(['bestStreaks', 'highScores', 'onboarded', 'rewards', 'settings', 'worldVisits']);
+    const back = fromSyncRecord(JSON.parse(JSON.stringify(record)));
+    expect(back).toEqual(storage.profile);
+    expect(fromSyncRecord({ schema: 99, id: 'x' })).toBeNull();
   });
 });
 

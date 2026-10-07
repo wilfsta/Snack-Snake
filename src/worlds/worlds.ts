@@ -1,4 +1,5 @@
 import type { Curriculum } from '../learning/curriculum';
+import { DEFAULT_PACING, type PacingConfig } from '../learning/pacing';
 import type { ArenaThemeId } from '../render/themes';
 import { GARDEN_CURRICULUM } from './gardenCurriculum';
 
@@ -15,8 +16,13 @@ export interface WorldDefinition {
   readonly curriculum: Curriculum;
   /** Answers per question. Young worlds keep this small. */
   readonly answerCount: number;
-  /** Plain apples to eat before any numbers appear: lots on the first visit, a couple after. */
-  readonly warmup: { readonly firstVisit: number; readonly laterVisits: number };
+  /**
+   * Plain apples a brand-new player eats before any maths: just learning to steer Sid and grow.
+   * Never assessed, and not repeated once a player has finished them.
+   */
+  readonly onboardingApples: number;
+  /** Thinking time before answers appear, by how well the child knows each fact. */
+  readonly pacing: PacingConfig;
   /** Questions and new things per visit, before the "look what grew!" reward screen. */
   readonly visitLength: number;
 }
@@ -28,7 +34,8 @@ export const NUMBER_GARDEN: WorldDefinition = {
   theme: 'garden',
   curriculum: GARDEN_CURRICULUM,
   answerCount: 3,
-  warmup: { firstVisit: 6, laterVisits: 2 },
+  onboardingApples: 5,
+  pacing: DEFAULT_PACING,
   visitLength: 12,
 };
 

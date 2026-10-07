@@ -36,6 +36,11 @@ export interface Challenge {
    * suits sums; questions like "3, 4, ?, 6" or "which has the most?" say it their own way.
    */
   readonly askAs?: string;
+  /**
+   * Time (ms) to let the child recall the answer after collecting the question, before the
+   * answer choices appear. Undefined or 0 = answers appear straight away.
+   */
+  readonly thinkingTimeMs?: number;
   /** The complete fact, e.g. "6 × 4 = 24". Used for introductions and reinforcement. */
   readonly statement: string;
   readonly correctAnswer: AnswerOption;
@@ -60,6 +65,11 @@ export type ChallengeEvent =
       /** 1 for the first answer eaten for this challenge, 2 for the second, ... */
       readonly attemptNumber: number;
       readonly hintStrength: number;
+      /**
+       * Time (ms) from the answers appearing to this answer being collected. In Snake this
+       * includes steering, so it is recorded for future use but not yet used to judge mastery.
+       */
+      readonly responseMs?: number;
     }
   | { readonly type: 'completed'; readonly challenge: Challenge; readonly firstTryCorrect: boolean };
 

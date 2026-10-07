@@ -3,6 +3,10 @@ import { DIRECTIONS, isOpposite, type Direction } from '../core/geometry';
 import { seededRng } from '../core/random';
 import type { Challenge, ChallengeEvent, ChallengeSource, ChallengeStage } from '../learning/types';
 import { planMove } from './collision';
+import { createContentLibrary } from '../content/ContentLibrary';
+import { LearningEngine } from '../learning/LearningEngine';
+import { LearningTracker } from '../learning/LearningTracker';
+import { GARDEN_CURRICULUM } from '../worlds/gardenCurriculum';
 import { buildRules, CLASSIC_RULES, LEARN_RULES, PLAY_RULES, sanitizeOptions } from './modes';
 import { SnakeSession, type SessionEvent } from './SnakeSession';
 import type { Tile } from './tiles';
@@ -269,6 +273,71 @@ describe('SnakeSession', () => {
     expect(session.inWarmup).toBe(false);
     waitFor(session, 'seek');
     expect(session.tiles[0].kind).toBe('fact');
+  });
+
+  it('CLASSIC: only ever apples – no questions, numerals or learning', () => {
+    const events: SessionEvent[] = [];
+    const session = new SnakeSession({ rules: CLASSIC_RULES, cols: 20, rows: 13, rng: seededRng(8), onEvent: (e) => events.push(e) });
+    session.start();
+    waitFor(session, 'seek');
+    for (let i = 0; i < 6; i++) {
+      expect(session.tiles.every((t) => t.kind === 'food' && t.label === '')).toBe(true);
+      steerToFood(session);
+    }
+    expect(events.filter((e) => e.type === 'foodEaten')).toHaveLength(6);
+    const learningEvents = events.filter((e) => ['challengePresented', 'questionEaten', 'answersShown', 'thinking', 'correct', 'wrong'].includes(e.type));
+    expect(learningEvents).toEqual([]);
+  });
+
+  it('thinking moment: the question stays, Sid slows (but keeps moving), then answers appear', () => {
+    const source = new FakeSource();
+    const original = source.next.bind(source);
+    source.next = () => ({ ...original(), thinkingTimeMs: 1500 });
+    const { session, events } = makeSession(buildRules('garden'), source);
+    waitFor(session, 'seek');
+    const normalStep = session.stepMs;
+    steerTo(session, session.tiles[0]);
+    expect(session.phase.kind).toBe('think');
+    expect(session.tiles).toHaveLength(0); // nothing to bump into or distract
+    expect(session.challenge?.prompt).toBe('RED?'); // the collected question is still known
+    expect(session.isMoving).toBe(true);
+    expect(session.stepMs).toBeGreaterThan(normalStep);
+    expect(events.some((e) => e.type === 'thinking' && e.thinkMs === 1500)).toBe(true);
+    session.update(1400);
+    expect(session.phase.kind).toBe('think');
+    expect(session.tiles).toHaveLength(0);
+    session.update(150);
+    expect(session.tiles).toHaveLength(5);
+    expect(events.some((e) => e.type === 'answersShown')).toBe(true);
+    waitFor(session, 'answer');
+    steerTo(session, session.tiles.find((t) => t.isCorrect)!);
+    const answered = source.events.find((e) => e.type === 'answered');
+    expect(answered && answered.type === 'answered' && answered.responseMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('without a thinking time, answers appear straight away (Play and Learn are unchanged)', () => {
+    const { session } = makeSession(PLAY_RULES);
+    waitFor(session, 'seek');
+    steerTo(session, session.tiles[0]);
+    expect(session.phase.kind).toBe('swallow');
+    expect(session.tiles).toHaveLength(5);
+  });
+
+  it('GARDEN: the starter apples never touch learning or placement', () => {
+    const tracker = new LearningTracker();
+    const engine = new LearningEngine(tracker, createContentLibrary(), seededRng(4));
+    const source = engine.createCurriculumSession(GARDEN_CURRICULUM, 12, { answerCount: 3 });
+    const session = new SnakeSession({ rules: buildRules('garden'), source, warmupFood: 5, cols: 20, rows: 13, rng: seededRng(4) });
+    session.start();
+    waitFor(session, 'seek');
+    for (let i = 0; i < 5; i++) {
+      expect(tracker.currentStep).toBe(0); // nothing has been asked or recorded
+      steerToFood(session);
+    }
+    expect(Object.keys(tracker.snapshot().records)).toEqual([]);
+    waitFor(session, 'seek');
+    expect(session.tiles[0].kind).not.toBe('food'); // now maths begins
+    expect(tracker.currentStep).toBe(1);
   });
 
   it('GARDEN: nothing ends the game - wrong answers and walls are forgiven', () => {
