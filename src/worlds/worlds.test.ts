@@ -43,6 +43,18 @@ describe('Number Garden curriculum', () => {
     }
   });
 
+  it('no Garden question needs reading: only numerals, symbols and pictures', () => {
+    const LETTERS = /[A-Za-z]/;
+    let seed = 1;
+    for (const id of curriculumItems(GARDEN_CURRICULUM)) {
+      for (const stage of ['introduce', 'guided', 'independent'] as const) {
+        const ch = library.createChallenge(id, { challengeId: 'x', stage, hintStrength: 0.5, distractorCount: 2, rng: seededRng(seed++) });
+        const shown = [ch.prompt, ch.askAs ?? '', ch.statement, ch.correctAnswer.label, ...ch.distractors.map((d) => d.label)];
+        for (const text of shown) expect(LETTERS.test(text), `${id}: "${text}"`).toBe(false);
+      }
+    }
+  });
+
   it('questions never ask a child to count more than 5 objects while steering', () => {
     const OBJECT = /🍎|●|🔴|🖐|☝|✌/gu;
     let seed = 1;

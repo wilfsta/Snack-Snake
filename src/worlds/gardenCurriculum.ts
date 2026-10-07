@@ -60,7 +60,6 @@ export const GARDEN_CURRICULUM: Curriculum = {
       title: 'Number sense with numerals',
       groups: [
         group('missing-number', 'Numbers in order to 10', range(1, 7).map((s) => `seq:${s}`), ['seq:2', 'seq:5', 'seq:7']),
-        group('compare', 'Biggest and smallest numbers', [...range(3, 8).map((n) => `more:${n}`), ...range(1, 5).map((n) => `fewest:${n}`)], ['more:6', 'fewest:3', 'more:8']),
         group('one-more', 'One more', range(1, 9).map((n) => `onemore:${n}`), ['onemore:4', 'onemore:8', 'onemore:6']),
         group('one-less', 'One less', range(2, 10).map((n) => `oneless:${n}`), ['oneless:5', 'oneless:9', 'oneless:7']),
       ],
