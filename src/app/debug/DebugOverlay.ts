@@ -26,7 +26,7 @@ export function debugRequested(): boolean {
 }
 
 const STATUS_MARK = { secure: '■', assumed: '◆', open: '·' } as const;
-const KIND_LABEL: Readonly<Record<string, string>> = { probe: 'check', recheck: 're-check', learn: 'learn', review: 'review' };
+const KIND_LABEL: Readonly<Record<string, string>> = { probe: 'check', recheck: 're-check', learn: 'learn', review: 'review', comeback: 'again' };
 
 /**
  * A developer/playtester panel showing what the learning engine is thinking. It is never
@@ -99,6 +99,7 @@ function format(v: DebugView): string {
   lines.push(`confidence ${c.confidence}   run ${c.streak}   checks this visit ${c.probesAsked}`);
   lines.push(c.explore ? `exploring  ${c.explore.lo} … [${c.explore.target}] … ${c.explore.hi}   right here: ${c.explore.atTarget}` : 'exploring  no (teaching at the frontier)');
   if (c.pendingRecheck) lines.push(`next       re-check ${c.pendingRecheck}`);
+  if (c.comebacks.length > 0) lines.push(`again soon ${c.comebacks.join(', ')}  (missed this visit)`);
   lines.push('');
   lines.push('groups  ■ secure  ◆ assumed (p=probed i=implied, +confirms −doubts)  · open');
   for (const g of c.groups) {
@@ -111,7 +112,7 @@ function format(v: DebugView): string {
     lines.push('recent questions (newest last)');
     for (const r of c.recent) {
       const result = r.result === null ? (r.stage === 'introduce' ? 'taught' : '…') : r.result ? '✓' : '✗';
-      lines.push(` ${(KIND_LABEL[r.kind] ?? r.kind).padEnd(8)} ${r.groupId.padEnd(18)} ${r.itemId.padEnd(12)} ${r.stage.padEnd(11)} ${result}`);
+      lines.push(` ${(KIND_LABEL[r.kind] ?? r.kind).padEnd(8)} ${r.groupId.padEnd(18)} ${r.itemId.padEnd(12)} ${r.stage.padEnd(11)} ${result}${r.why ? `  ← ${r.why}` : ''}`);
     }
   }
   return lines.join('\n');

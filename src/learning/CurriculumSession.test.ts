@@ -6,6 +6,7 @@ import { seededRng } from '../core/random';
 import { awardMilestones, initialRewardState, MILESTONE_RULES } from '../rewards/economy';
 import { MemoryStore, StorageManager } from '../storage/StorageManager';
 import { GARDEN_CURRICULUM } from '../worlds/gardenCurriculum';
+import { ADDITION } from '../content/arithmetic/operations';
 import { curriculumGroups } from './curriculum';
 import type { CurriculumSession } from './CurriculumSession';
 import { LearningEngine } from './LearningEngine';
@@ -65,17 +66,25 @@ interface Turn {
   readonly stage: ChallengeStage;
   readonly correct: boolean;
   readonly frontierAfter: number;
+  /** Why the engine asked it (probe / recheck / learn / review / comeback), and its explanation. */
+  readonly kind: string;
+  readonly why: string | null;
+  /** Which visit (12-question session) it was asked in. */
+  readonly visit: number;
 }
 
 /** Plays `turns` challenges (across as many 12-question visits as needed), like the game does. */
 function play(engine: LearningEngine, child: Child, turns: number, onPassed?: (ids: readonly string[]) => void): Turn[] {
   const log: Turn[] = [];
   let session: CurriculumSession | null = null;
+  let visit = 0;
   while (log.length < turns) {
     if (!session || session.isSessionComplete()) {
       session = engine.createCurriculumSession(GARDEN_CURRICULUM, 12, { answerCount: 3, onGroupsPassed: onPassed });
+      visit++;
     }
     const ch = session.next();
+    const asked = session.debugInfo().recent.at(-1);
     let correct = true;
     if (ch.stage === 'introduce') {
       session.record({ type: 'introduced', challenge: ch });
@@ -87,7 +96,7 @@ function play(engine: LearningEngine, child: Child, turns: number, onPassed?: (i
       if (!correct) session.record({ type: 'answered', challenge: ch, optionId: 'y', correct: true, attemptNumber: 2, hintStrength: 1 });
       session.record({ type: 'completed', challenge: ch, firstTryCorrect: correct });
     }
-    log.push({ itemId: ch.itemId, group: groupIndex.get(ch.itemId) ?? -1, stage: ch.stage, correct, frontierAfter: session.frontier });
+    log.push({ itemId: ch.itemId, group: groupIndex.get(ch.itemId) ?? -1, stage: ch.stage, correct, frontierAfter: session.frontier, kind: asked?.kind ?? '?', why: asked?.why ?? null, visit });
   }
   return log;
 }
@@ -233,6 +242,72 @@ describe('finding the edge of what a child knows', () => {
     const learner = freshEngine(11);
     const long = play(learner, makeChild(() => false), 2500);
     expect(long[long.length - 1].frontierAfter).toBe(GROUPS.length);
+  });
+});
+
+describe('adaptive revision', () => {
+  /** A child who knows adding to 10 except one fact, which they get wrong unless hinted. */
+  function knowsAllBut(weak: string): Child {
+    const base = makeChild((g) => g <= ADD_TO_10);
+    return {
+      answer: (itemId, stage) => (itemId === weak ? stage === 'guided' : base.answer(itemId, stage)),
+      taught: base.taught,
+    };
+  }
+
+  it('a fact missed in a visit comes back once, a few questions later', () => {
+    const log = play(freshEngine(21), makeChild(() => false), 200);
+    const comebacks = log.map((t, i) => ({ t, i })).filter(({ t }) => t.kind === 'comeback');
+    expect(comebacks.length).toBeGreaterThan(0);
+    for (const { t, i } of comebacks) {
+      // It was missed earlier in the same visit, at least 3 questions before.
+      const missedAt = log.slice(0, i).reduce((at, m, j) => (m.itemId === t.itemId && !m.correct && m.stage === 'independent' && m.visit === t.visit ? j : at), -1);
+      expect(missedAt, t.itemId).toBeGreaterThanOrEqual(0);
+      expect(i - missedAt).toBeGreaterThanOrEqual(4);
+      // Only one second chance per fact per visit.
+      expect(comebacks.filter((c) => c.t.itemId === t.itemId && c.t.visit === t.visit)).toHaveLength(1);
+    }
+  });
+
+  it('reviews go to the earlier fact the child keeps getting wrong', () => {
+    const weak = ADDITION.itemId(2, 6); // 6 + 2, in adding within 10
+    const tracker = new LearningTracker();
+    const log = play(freshEngine(22, tracker), knowsAllBut(weak), 120);
+    expect(log[log.length - 1].frontierAfter).toBeGreaterThan(ADD_TO_10);
+    const reviews = log.filter((t) => t.kind === 'review' && t.why !== null);
+    expect(reviews.some((t) => t.itemId === weak && /struggling|shaky/.test(t.why ?? ''))).toBe(true);
+    // Once it has gone wrong, it keeps coming back far more than any other earlier fact.
+    const firstMiss = log.findIndex((t) => t.itemId === weak && !t.correct);
+    expect(firstMiss).toBeGreaterThanOrEqual(0);
+    const after = log.slice(firstMiss + 1).filter((t) => t.group <= ADD_TO_10);
+    const counts = new Map<string, number>();
+    for (const t of after) counts.set(t.itemId, (counts.get(t.itemId) ?? 0) + 1);
+    const others = [...counts].filter(([id]) => id !== weak).map(([, n]) => n);
+    expect(counts.get(weak) ?? 0).toBeGreaterThan(Math.max(0, ...others));
+  });
+
+  it('well-known facts not seen for a long time are refreshed', () => {
+    const log = play(freshEngine(23), makeChild((g) => g <= SUB_TO_20), 300);
+    expect(log.some((t) => t.kind === 'review' && (t.why ?? '').startsWith('rusty'))).toBe(true);
+  });
+
+  it('a child who gets everything right is not held back by revision', () => {
+    const log = play(freshEngine(24), makeChild(() => true), 30);
+    expect(log.filter((t) => t.kind === 'comeback')).toEqual([]);
+    expect(log[log.length - 1].frontierAfter).toBe(GROUPS.length);
+  });
+
+  it('revision stays a small share of a visit: most questions are still new learning', () => {
+    const log = play(freshEngine(25), makeChild((g) => g <= BONDS_TO_5), 240);
+    const revising = log.filter((t) => t.kind === 'review' || t.kind === 'comeback').length;
+    expect(revising / log.length).toBeLessThan(0.35);
+  });
+
+  it('the debug view explains why a revision question was chosen', () => {
+    const log = play(freshEngine(22), knowsAllBut(ADDITION.itemId(2, 6)), 120);
+    const explained = log.filter((t) => t.why !== null).map((t) => t.why);
+    expect(explained.length).toBeGreaterThan(0);
+    for (const why of explained) expect(why).toMatch(/^(struggling \(\d+% right lately\)|shaky \(went wrong last time\)|rusty \(not seen for \d+ questions\)|missed earlier this visit)$/);
   });
 });
 

@@ -2,8 +2,8 @@ import { recentAccuracy, type MasteryRecord } from './mastery';
 import { itemKnown, itemShaky } from './placement';
 
 /**
- * What a child should practise next. Not wired into the game yet: this is the foundation for
- * spaced/adaptive revision ("you know your 2s, 5s and 10s, but some 4s need another look").
+ * What a child should practise next ("you know your 2s, 5s and 10s, but some 4s need another
+ * look"). CurriculumSession uses it to give its review slot to the facts that most need it.
  */
 export type PracticeReason = 'struggling' | 'shaky' | 'rusty';
 

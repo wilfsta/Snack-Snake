@@ -4,6 +4,8 @@ A funny Snake game where you gobble the right answers. Start in the **Number Gar
 
 **How a Garden question works:** collect the question → Sid keeps moving slowly while the child thinks (the question stays big on screen) → the answers appear → collect the right one. Thinking time is set per fact (more for new things, less for well-known ones) in `src/learning/pacing.ts`. A brand-new player first eats 5 plain apples to learn the controls; returning players go straight to maths. Classic Snake is apples only.
 
+**Revision without repeating levels:** a fact the child gets wrong comes back once, a few questions later in the same visit. Every 5th question looks back at earlier material: facts that keep going wrong come first (taking turns with quiet re-checks of anything skipped), then well-known facts that haven't come up for a long while. Revision stays a small share of play, so a child who knows their numbers keeps moving towards multiplication.
+
 **Players**: up to 6 children can each have their own Sid, stars, garden, learning progress and options (tap the player chip on the menu). Saves from before profiles become Player 1.
 
 **Options** (main menu or pause): snake speed, wrap-around vs deadly walls, and how many answers appear (2–6, fewer = easier).

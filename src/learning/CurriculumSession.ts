@@ -17,6 +17,7 @@ import {
   type ExploreState,
 } from './placement';
 import { thinkingTimeFor, type PacingConfig } from './pacing';
+import { practiceTargets, type PracticeNeed } from './practice';
 import { needsIntroduction, pickNextItem, planStage, shouldUnlockMore } from './selection';
 import type { Challenge, LearningContent } from './types';
 
@@ -40,6 +41,8 @@ export interface CurriculumDebugInfo {
   readonly explore: { readonly lo: string; readonly target: string; readonly hi: string; readonly atTarget: number } | null;
   readonly probesAsked: number;
   readonly pendingRecheck: string | null;
+  /** Facts missed this visit that are waiting to come back. */
+  readonly comebacks: readonly string[];
   readonly groups: readonly {
     readonly id: string;
     readonly status: 'secure' | 'assumed' | 'open';
@@ -50,7 +53,7 @@ export interface CurriculumDebugInfo {
     readonly size: number;
   }[];
   /** Recent questions: why each was asked (probe / recheck / learn / review) and how it went. */
-  readonly recent: readonly { readonly kind: string; readonly groupId: string; readonly itemId: string; readonly stage: string; readonly result: boolean | null }[];
+  readonly recent: readonly { readonly kind: string; readonly groupId: string; readonly itemId: string; readonly stage: string; readonly result: boolean | null; readonly why: string | null }[];
 }
 
 /** Why a challenge was asked, so its result is interpreted correctly. */
@@ -58,7 +61,8 @@ type Purpose =
   | { readonly kind: 'probe'; readonly group: number }
   | { readonly kind: 'recheck'; readonly group: number }
   | { readonly kind: 'learn'; readonly group: number }
-  | { readonly kind: 'review'; readonly group: number };
+  | { readonly kind: 'review'; readonly group: number }
+  | { readonly kind: 'comeback'; readonly group: number };
 
 /** Most quiet checks in one visit before simply getting on with learning. */
 const MAX_PROBES_PER_SESSION = 16;
@@ -66,6 +70,10 @@ const MAX_PROBES_PER_SESSION = 16;
 const REVIEW_EVERY = 5;
 /** Items unlocked when a child starts learning a skill group. */
 const INITIAL_UNLOCKED = 2;
+/** A fact missed this visit comes back after this many other questions. */
+const COMEBACK_AFTER = 3;
+/** Most missed facts waiting to come back at once (so a hard patch doesn't become a loop). */
+const MAX_COMEBACKS = 2;
 
 /**
  * A learning session over a whole curriculum (e.g. the Number Garden journey).
@@ -77,6 +85,8 @@ const INITIAL_UNLOCKED = 2;
  *    right first time and narrowing back on a miss. Groups passed this way are *assumed* known.
  *  - settle:  learn the frontier group (introduce → guided → independent), mixing in reviews and
  *    re-checks of assumed groups. Repeated struggle triggers a re-check of the group before.
+ *  - revise:  the review slot goes to the facts that most need it (struggling, shaky, then rusty),
+ *    and a fact missed this visit comes back once, a few questions later.
  */
 export class CurriculumSession extends BaseSession {
   readonly groups: readonly SkillGroup[];
@@ -97,6 +107,14 @@ export class CurriculumSession extends BaseSession {
   private frontierResults: boolean[] = [];
   private lastFrontier = -1;
   private lastExploreAt = -Infinity;
+  /** Which group each item belongs to. */
+  private readonly groupOf = new Map<string, number>();
+  /** Missed facts waiting to come back, and when (in completed questions). */
+  private comebacks: { itemId: string; group: number; due: number }[] = [];
+  /** Facts already given their second chance this visit. */
+  private readonly comebackGiven = new Set<string>();
+  /** Whether the last review slot went to a weak fact (so the next can go to a re-check). */
+  private lastReviewRevised = false;
 
   constructor(
     readonly curriculum: Curriculum,
@@ -108,6 +126,7 @@ export class CurriculumSession extends BaseSession {
   ) {
     super(tracker, content, rng, hooks);
     this.groups = curriculumGroups(curriculum);
+    this.groups.forEach((g, i) => g.itemIds.forEach((id) => this.groupOf.set(id, i)));
     this.state = tracker.curriculumState(curriculum.id);
     this.passed = new Set(this.groups.filter((_, i) => this.isPassed(i)).map((g) => g.id));
     this.maybeStartExplore();
@@ -194,24 +213,77 @@ export class CurriculumSession extends BaseSession {
       this.frontierResults = [];
     }
 
-    // Spaced review: now and then look back at an earlier group (re-checking assumed ones first).
-    if (this.learnCount > 0 && this.learnCount % REVIEW_EVERY === 0) {
-      const back = this.reviewGroup(f);
-      if (back !== null) {
-        this.learnCount++;
-        const kind = this.assumed(back) ? 'recheck' : 'review';
-        const item = kind === 'recheck' ? this.pickProbeItem(back) : this.pickReviewItem(back);
-        return this.ask(item, 'independent', { kind, group: back });
-      }
+    // A fact missed earlier this visit gets a second chance, a few questions later.
+    const due = this.comebacks.findIndex((c) => this.completed >= c.due);
+    if (due !== -1) {
+      const [back] = this.comebacks.splice(due, 1);
+      const plan = this.revisionStage(back.itemId);
+      return this.ask(back.itemId, plan.stage, { kind: 'comeback', group: back.group }, plan.hintStrength, 'missed earlier this visit');
+    }
+
+    // Spaced review: now and then look back at earlier material.
+    if (this.learnCount > 0 && this.learnCount % REVIEW_EVERY === 0 && f > 0) {
+      this.learnCount++;
+      return this.reviewSlot(f);
     }
 
     this.learnCount++;
     if (f >= this.groups.length) {
-      // The whole journey is done: keep everything fresh with mixed practice.
+      // The whole journey is done: keep everything fresh with mixed practice, weakest facts first.
+      const need = this.revisionNeed(f);
+      if (need) return this.revise(need);
       const g = Math.floor(this.rng.next() * this.groups.length);
       return this.ask(this.pickReviewItem(g), 'independent', { kind: 'review', group: g });
     }
     return this.learnIn(f);
+  }
+
+  /**
+   * What the review slot is spent on. Facts that are going wrong (struggling, shaky) take turns
+   * with re-checks of skipped groups, so both happen; then rusty facts; then anything earlier.
+   */
+  private reviewSlot(f: number): Challenge {
+    const need = this.revisionNeed(f);
+    const unverified = this.unverifiedGroup(f);
+    const urgent = need !== null && need.reason !== 'rusty';
+    if (unverified !== null && !(urgent && !this.lastReviewRevised)) {
+      this.lastReviewRevised = false;
+      return this.ask(this.pickProbeItem(unverified), 'independent', { kind: 'recheck', group: unverified });
+    }
+    if (need) {
+      this.lastReviewRevised = true;
+      return this.revise(need);
+    }
+    this.lastReviewRevised = false;
+    const back = pick(this.rng, Array.from({ length: Math.min(f, this.groups.length) }, (_, i) => i));
+    if (this.assumed(back)) return this.ask(this.pickProbeItem(back), 'independent', { kind: 'recheck', group: back });
+    return this.ask(this.pickReviewItem(back), 'independent', { kind: 'review', group: back });
+  }
+
+  /** The earlier fact that most needs practice (struggling, shaky, then rusty), if any. */
+  private revisionNeed(frontier: number): PracticeNeed | null {
+    const earlier = Array.from({ length: Math.min(frontier, this.groups.length) }, (_, i) => i);
+    const records = earlier.flatMap((g) => this.records(g));
+    return practiceTargets(records, this.tracker.currentStep).find((n) => !this.recent.includes(n.itemId)) ?? null;
+  }
+
+  private revise(need: PracticeNeed): Challenge {
+    const plan = this.revisionStage(need.itemId);
+    return this.ask(need.itemId, plan.stage, { kind: 'review', group: this.groupOf.get(need.itemId) ?? 0 }, plan.hintStrength, describeNeed(need));
+  }
+
+  /** Revision never re-teaches from scratch: a plain question, or a hinted one if it keeps going wrong. */
+  private revisionStage(itemId: string): { stage: 'guided' | 'independent'; hintStrength: number } {
+    const plan = planStage(this.tracker.get(itemId));
+    return plan.stage === 'guided' ? { stage: 'guided', hintStrength: plan.hintStrength } : { stage: 'independent', hintStrength: 0 };
+  }
+
+  /** Remember a missed fact so it comes back once, later this visit. */
+  private scheduleComeback(itemId: string): void {
+    const group = this.groupOf.get(itemId);
+    if (group === undefined || this.comebackGiven.has(itemId) || this.comebacks.length >= MAX_COMEBACKS) return;
+    this.comebackGiven.add(itemId);
+    this.comebacks.push({ itemId, group, due: this.completed + COMEBACK_AFTER });
   }
 
   /** Teach and practise inside the frontier group, the way Learn mode does. */
@@ -256,16 +328,13 @@ export class CurriculumSession extends BaseSession {
     return records;
   }
 
-  /** An earlier group to look back at: unverified assumed groups first, otherwise any passed group. */
-  private reviewGroup(frontier: number): number | null {
-    const earlier = Array.from({ length: Math.min(frontier, this.groups.length) }, (_, i) => i);
-    if (earlier.length === 0) return null;
-    const unverified = earlier.filter((i) => {
+  /** The latest skipped group that hasn't yet been confirmed enough to trust, if any. */
+  private unverifiedGroup(frontier: number): number | null {
+    for (let i = Math.min(frontier, this.groups.length) - 1; i >= 0; i--) {
       const a = this.assumed(i);
-      return a !== undefined && !this.secure(i) && a.confirms < CONFIRMS_TO_TRUST;
-    });
-    if (unverified.length > 0) return unverified[unverified.length - 1];
-    return pick(this.rng, earlier);
+      if (a !== undefined && !this.secure(i) && a.confirms < CONFIRMS_TO_TRUST) return i;
+    }
+    return null;
   }
 
   /** A representative item for checking a group, preferring ones not asked this visit. */
@@ -284,21 +353,21 @@ export class CurriculumSession extends BaseSession {
     return pickNextItem(records, this.tracker.currentStep, this.recent, this.rng).itemId;
   }
 
-  private ask(itemId: string, stage: 'introduce' | 'guided' | 'independent', purpose: Purpose, hintStrength = 0): Challenge {
+  private ask(itemId: string, stage: 'introduce' | 'guided' | 'independent', purpose: Purpose, hintStrength = 0, why: string | null = null): Challenge {
     this.askedThisSession.add(itemId);
     const record = this.tracker.get(itemId);
     const built = this.build(record, { stage, hintStrength: stage === 'guided' ? hintStrength : 0 });
     // How long to let the child think before answers appear: more for new things, less for known ones.
     const challenge = this.hooks.pacing ? { ...built, thinkingTimeMs: thinkingTimeFor(record, stage, this.hooks.pacing) } : built;
     this.purposes.set(challenge.id, purpose);
-    this.log.push({ challengeId: challenge.id, kind: purpose.kind, groupId: this.groups[purpose.group].id, itemId, stage, result: null });
+    this.log.push({ challengeId: challenge.id, kind: purpose.kind, groupId: this.groups[purpose.group].id, itemId, stage, result: null, why });
     if (this.log.length > 12) this.log.shift();
     return challenge;
   }
 
   // ---- Developer view (never shown to children) -----------------------------------------------
 
-  private readonly log: { challengeId: string; kind: Purpose['kind']; groupId: string; itemId: string; stage: string; result: boolean | null }[] = [];
+  private readonly log: { challengeId: string; kind: Purpose['kind']; groupId: string; itemId: string; stage: string; result: boolean | null; why: string | null }[] = [];
 
   /** A read-only picture of the engine's reasoning, for the hidden debug overlay and tests. */
   debugInfo(): CurriculumDebugInfo {
@@ -315,6 +384,7 @@ export class CurriculumSession extends BaseSession {
         : null,
       probesAsked: this.probesAsked,
       pendingRecheck: this.pendingRecheck === null ? null : this.groups[this.pendingRecheck].id,
+      comebacks: this.comebacks.map((c) => c.itemId),
       groups: this.groups.map((g, i) => {
         const a = this.assumed(i);
         return {
@@ -327,7 +397,7 @@ export class CurriculumSession extends BaseSession {
           size: g.itemIds.length,
         };
       }),
-      recent: this.log.map(({ kind, groupId, itemId, stage, result }) => ({ kind, groupId, itemId, stage, result })),
+      recent: this.log.map(({ kind, groupId, itemId, stage, result, why }) => ({ kind, groupId, itemId, stage, result, why })),
     };
   }
 
@@ -341,6 +411,11 @@ export class CurriculumSession extends BaseSession {
     // Evidence only counts when nothing helped: a plain question, right first time.
     const unaided = challenge.stage === 'independent' && firstTryCorrect;
     if (challenge.stage !== 'introduce') this.streak = unaided ? this.streak + 1 : 0;
+    // Missed a plain question while learning or revising? It comes back once, a little later.
+    // (Missed checks of material further ahead are not revision: that is placement doing its job.)
+    if (challenge.stage === 'independent' && !firstTryCorrect && (purpose?.kind === 'learn' || purpose?.kind === 'review' || purpose?.kind === 'recheck')) {
+      this.scheduleComeback(challenge.itemId);
+    }
 
     if (purpose) {
       switch (purpose.kind) {
@@ -357,6 +432,7 @@ export class CurriculumSession extends BaseSession {
           }
           break;
         case 'review':
+        case 'comeback':
           break;
       }
     }
@@ -441,5 +517,17 @@ export class CurriculumSession extends BaseSession {
       }
     });
     if (newly.length > 0) this.hooks.onGroupsPassed?.(newly);
+  }
+}
+
+/** A short, grown-up explanation of why a fact was chosen for revision (debug view only). */
+function describeNeed(need: PracticeNeed): string {
+  switch (need.reason) {
+    case 'struggling':
+      return `struggling (${Math.round((need.accuracy ?? 0) * 100)}% right lately)`;
+    case 'shaky':
+      return 'shaky (went wrong last time)';
+    case 'rusty':
+      return `rusty (not seen for ${need.sinceSeen} questions)`;
   }
 }
