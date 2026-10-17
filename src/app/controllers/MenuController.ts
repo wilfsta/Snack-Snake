@@ -10,13 +10,22 @@ import type { RewardService } from '../services/RewardService';
 import type { SettingsService } from '../services/SettingsService';
 import { withClick, type Navigator } from '../types';
 
-const SUBJECT_EXAMPLES: Readonly<Record<string, string>> = { mul: '6 × 4', add: '7 + 3', sub: '9 − 2', div: '12 ÷ 3' };
+const SUBJECT_EXAMPLES: Readonly<Record<string, string>> = {
+  mul: '6 × 4',
+  add: '7 + 3',
+  sub: '9 − 2',
+  div: '12 ÷ 3',
+  frac: '¾ of 12',
+  pct: '25% of 80',
+};
 
 const TABLE_TITLES: Readonly<Record<string, string>> = {
   mul: 'Pick a times table!',
   add: 'What are we adding?',
   sub: 'What are we taking away?',
   div: 'What are we dividing by?',
+  frac: 'Pick a fraction!',
+  pct: 'Pick a percentage!',
 };
 
 export const CLASSIC_UNIT = 'classic';

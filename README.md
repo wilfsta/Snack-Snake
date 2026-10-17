@@ -1,6 +1,6 @@
 # Snack Snake
 
-A funny Snake game where you gobble the right answers. Start in the **Number Garden** (ages 5+: a journey of numerals and sums – numbers in order, one more/less, number bonds, adding and taking away, to the foundations of multiplication. It quietly finds what each child already knows and starts there – no tests, nothing can go wrong; earn ⭐ stars to grow your garden and dress Sid in hats, glasses and patterns), or pick times tables, adding, taking away or dividing, or Classic (original rules).
+A funny Snake game where you gobble the right answers. Start in the **Number Garden** (ages 5+: a journey of numerals and sums – numbers in order, one more/less, number bonds, adding and taking away, to the foundations of multiplication. It quietly finds what each child already knows and starts there – no tests, nothing can go wrong; earn ⭐ stars to grow your garden and dress Sid in hats, glasses and patterns), or pick times tables, adding, taking away, dividing, fractions (e.g. ¾ of 12) or percentages (e.g. 25% of 80), or Classic (original rules).
 
 **How a Garden question works:** collect the question → Sid keeps moving slowly while the child thinks (the question stays big on screen) → the answers appear → collect the right one. Thinking time is set per fact (more for new things, less for well-known ones) in `src/learning/pacing.ts`. A brand-new player first eats 5 plain apples to learn the controls; returning players go straight to maths. Classic Snake is apples only.
 
@@ -43,7 +43,7 @@ src/
   game/       Grid-authoritative Snake: SnakeSession (in-game phase machine), Snake, Arena, collision, spawner, scoring, modes
   learning/   Subject-agnostic: Challenge/ChallengeSource interfaces, LearningEngine, LearningTracker, mastery rules;
               curriculum (stages > skill groups > items), placement (edge-finding, provisional "assumed" groups), CurriculumSession
-  content/    Educational content plug-ins. arithmetic/ = ×, +, −, ÷ operations (facts introduced in order 1..12); ContentLibrary routes between subjects
+  content/    Educational content plug-ins. arithmetic/ = ×, +, −, ÷, fractions and percentages of an amount (facts introduced in order 1..12); ContentLibrary routes between subjects
   render/     Canvas: GameRenderer, SnakeRenderer + SnakeAnimator (emotions), skins, tiles, effects
   input/      InputManager merging KeyboardInput, GamepadInput, TouchInput into abstract directions/actions
   audio/      AudioManager (synthesised placeholder sounds; `registerAsset(id, url)` to use real files)

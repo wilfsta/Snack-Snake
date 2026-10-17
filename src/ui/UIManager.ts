@@ -4,6 +4,7 @@ import type { MasteryState } from '../learning/mastery';
 import type { TouchControlsPreference } from '../storage/StorageManager';
 import { button, el } from './dom';
 import { findNeighbour } from './spatialNav';
+import { watchFractions } from './stackFractions';
 
 export interface TableChoice {
   readonly unitId: string;
@@ -223,6 +224,7 @@ export class UIManager {
 
   constructor(private readonly hooks: UIHooks) {
     $('hud-pause').addEventListener('click', () => hooks.onPauseButton());
+    watchFractions(this.app);
     window.addEventListener('resize', () => this.fitScreen());
     // Webfont arrival changes text sizes, so re-fit once fonts are ready.
     void document.fonts?.ready.then(() => this.fitScreen());
@@ -987,7 +989,11 @@ export class UIManager {
     this.hudStreakBox.hidden = view.mode === 'classic' || view.mode === 'garden';
     this.hudStreakBox.classList.toggle('hot', view.streak >= 3);
     // The game supplies the whole question, e.g. "6 × 4 = ?" or "3, 4, ?, 6".
-    this.hudQuestion.textContent = view.question ? view.question.replace(/\n/g, ' ') : '';
+    // Each "?" sits in a bright box, so the missing part of the question stands out.
+    const question = view.question ? view.question.replace(/\n/g, ' ') : '';
+    const line = el('span', { class: 'q-line' });
+    line.append(...question.split(/(\?)/).filter((t) => t !== '').map((t) => (t === '?' ? el('span', { class: 'q-mark', text: '?' }) : document.createTextNode(t))));
+    this.hudQuestion.replaceChildren(line);
     this.hudQuestion.classList.toggle('visible', !!view.question);
 
     this.hudProgress.hidden = !view.progress;

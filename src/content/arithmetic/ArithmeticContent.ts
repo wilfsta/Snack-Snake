@@ -14,7 +14,7 @@ export function mixedUnitId(op: ArithmeticOperation): string {
   return `${op.id}:mixed`;
 }
 
-/** LearningContent for one arithmetic operation (times tables, adding, taking away, dividing). */
+/** LearningContent for one arithmetic operation (times tables, adding, taking away, dividing, fractions, percentages). */
 export class ArithmeticContent implements LearningContent {
   readonly subjectId: string;
   private readonly units = new Map<string, LearningUnit>();
@@ -58,7 +58,14 @@ export class ArithmeticContent implements LearningContent {
     const p = this.op.parseItemId(itemId);
     if (!p) return { short: itemId, full: itemId };
     const f = this.op.fact(p.n, p.k);
-    return { short: `${f.left}${this.op.symbol}${f.right}`, full: `${f.left} ${this.op.symbol} ${f.right} = ${f.answer}` };
+    const prompt = this.promptFor(p.n, p.k);
+    return { short: this.op.prompt ? prompt : `${f.left}${this.op.symbol}${f.right}`, full: `${prompt} = ${f.answer}` };
+  }
+
+  private promptFor(n: number, k: number): string {
+    if (this.op.prompt) return this.op.prompt(n, k);
+    const f = this.op.fact(n, k);
+    return `${f.left} ${this.op.symbol} ${f.right}`;
   }
 
   createChallenge(itemId: string, request: ChallengeRequest): Challenge {
@@ -67,7 +74,7 @@ export class ArithmeticContent implements LearningContent {
     const { n, k } = p;
     const fact = this.op.fact(n, k);
     const id = request.challengeId;
-    const prompt = `${fact.left} ${this.op.symbol} ${fact.right}`;
+    const prompt = this.promptFor(n, k);
     const wrong = this.op.distractors(n, k, Math.max(1, request.distractorCount), request.rng);
     return {
       id,

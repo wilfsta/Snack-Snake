@@ -10,7 +10,9 @@
   --accent: #7b5cff;
   --accent-dark: #3d2a9e;
   --gold: #ffd54a;
-  --focus: #ffe14d;
+  --focus: #ff3d8b;
+  --focus-ink: #1d2248;
+  --focus-glow: rgba(255, 61, 139, 0.45);
   --good: #1e9e4a;
   --bad: #d6334a;
   --bg-top: #3a8dde;
@@ -57,9 +59,44 @@ button {
   user-select: none;
 }
 
-button:focus-visible {
-  outline: 5px solid var(--focus);
-  outline-offset: 4px;
+/*
+ * The menu "cursor": a dark ring inside a bright pink glow that gently pulses, so it is easy to
+ * see on light, dark and coloured buttons alike (yellow got lost against white borders).
+ */
+button:focus-visible,
+.slider:focus-visible,
+.name-input:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 4px var(--focus-ink),
+    0 0 0 10px var(--focus),
+    0 0 22px 12px var(--focus-glow) !important;
+  animation: focus-pulse 0.9s ease-in-out infinite alternate !important;
+  position: relative;
+  z-index: 2;
+}
+
+@keyframes focus-pulse {
+  from {
+    box-shadow:
+      0 0 0 4px var(--focus-ink),
+      0 0 0 8px var(--focus),
+      0 0 14px 8px var(--focus-glow);
+  }
+  to {
+    box-shadow:
+      0 0 0 4px var(--focus-ink),
+      0 0 0 12px var(--focus),
+      0 0 26px 14px var(--focus-glow);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:focus-visible,
+  .slider:focus-visible,
+  .name-input:focus-visible {
+    animation: none !important;
+  }
 }
 
 [hidden] {
@@ -1085,7 +1122,7 @@ button:focus-visible {
 
 .subject-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: clamp(10px, 2vw, 18px);
   width: 100%;
 }
@@ -1114,6 +1151,8 @@ button:focus-visible {
 .subject-add { background: linear-gradient(#3cc35a, #1d7a36); }
 .subject-sub { background: linear-gradient(#3aa6f0, #1a5fae); }
 .subject-div { background: linear-gradient(#a77bff, #5b35c4); }
+.subject-frac { background: linear-gradient(#ff6fae, #b8246a); }
+.subject-pct { background: linear-gradient(#2cc6b8, #137a72); }
 
 .subject-card {
   display: flex;
@@ -1221,8 +1260,6 @@ button:focus-visible {
 }
 
 .slider:focus-visible {
-  outline: 5px solid var(--focus);
-  outline-offset: 4px;
   border-radius: 999px;
 }
 
@@ -1724,11 +1761,6 @@ button:focus-visible {
   user-select: text;
 }
 
-.name-input:focus-visible {
-  outline: 5px solid var(--focus);
-  outline-offset: 2px;
-}
-
 .avatar-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -1828,4 +1860,42 @@ button:focus-visible {
 
 .debug-overlay.collapsed {
   width: auto;
+}
+
+/* ---------- Stacked fractions (½ ¾ ⅔ … drawn as 3 over 4, sized to match the digits) ---------- */
+
+.frac-visual {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  vertical-align: middle;
+  margin: 0 0.06em;
+  font-size: 0.62em;
+  line-height: 1;
+  text-align: center;
+}
+
+.frac-num {
+  padding: 0 0.12em 0.06em;
+  border-bottom: 0.12em solid currentColor;
+  border-radius: 0.04em;
+}
+
+.frac-den {
+  padding: 0.06em 0.12em 0;
+}
+
+/* ---------- The "?" in a question: a bright box, like the blank on a worksheet ---------- */
+
+.q-mark {
+  display: inline-block;
+  min-width: 1.15em;
+  padding: 0.06em 0.18em 0.02em;
+  margin: 0 0.04em;
+  border-radius: 0.24em;
+  background: #ff3d8b;
+  color: #fff;
+  box-shadow: 0 0 0 0.07em #fff, 0 0.08em 0 0.07em rgba(0, 0, 0, 0.18);
+  text-align: center;
+  line-height: 1;
 }

@@ -7,6 +7,7 @@ import type { SnakeAnimator } from './SnakeAnimator';
 import { SnakeRenderer } from './SnakeRenderer';
 import type { ArenaThemeId } from './themes';
 import type { SnakeSkin } from './skins';
+import { drawRich, measureRich } from './richText';
 import { drawHint, drawTile } from './tileRenderer';
 
 export interface SceneOptions {
@@ -92,22 +93,16 @@ export class GameRenderer {
     const y = layout.oy + (layout.rows * c) * (thinking ? 0.22 : 0.3);
     ctx.save();
     if (thinking) ctx.globalAlpha = 0.88;
-    ctx.font = `700 ${size}px ${FONT_STACK}`;
+    const font = (px: number) => `700 ${px}px ${FONT_STACK}`;
     // Long questions shrink to fit the board.
     const maxW = layout.cols * c * 0.9;
-    const w = ctx.measureText(text).width;
-    if (w > maxW) {
-      size *= maxW / w;
-      ctx.font = `700 ${size}px ${FONT_STACK}`;
-    }
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    const w = measureRich(ctx, text, size, font);
+    if (w > maxW) size *= maxW / w;
     ctx.lineJoin = 'round';
     ctx.lineWidth = size * 0.16;
     ctx.strokeStyle = '#2b2d5c';
-    ctx.strokeText(text, x, y);
     ctx.fillStyle = '#ffd54a';
-    ctx.fillText(text, x, y);
+    drawRich(ctx, text, x, y, size, font, ['stroke', 'fill']);
     if (progress !== undefined) {
       // A soft bar filling up: answers are on their way. Not a countdown, nothing runs out.
       const bw = Math.min(layout.cols * c * 0.5, size * 4);

@@ -1,6 +1,9 @@
 import { clamp, easeOutBack } from '../core/geometry';
 import type { Tile, TileKind, TileMark } from '../game/tiles';
 import { drawStar, FONT_STACK, roundRectPath, type Layout } from './layout';
+import { drawRich, measureRich } from './richText';
+
+const labelFont = (px: number) => `700 ${px}px ${FONT_STACK}`;
 
 /** Minimal tile description so effects can draw "ghost" copies of eaten tiles. */
 export interface TileLike {
@@ -84,17 +87,11 @@ export function drawTile(ctx: CanvasRenderingContext2D, layout: Layout, tile: Ti
   // Label (one or two lines), shrunk to fit.
   const lines = tile.label.split('\n');
   let size = Math.min(h * (lines.length > 1 ? 0.86 / lines.length : 0.56), c * 1.05);
-  ctx.font = `700 ${size}px ${FONT_STACK}`;
   const maxW = w * 0.84;
-  const measured = Math.max(...lines.map((l) => ctx.measureText(l).width));
-  if (measured > maxW) {
-    size *= maxW / measured;
-    ctx.font = `700 ${size}px ${FONT_STACK}`;
-  }
+  const measured = Math.max(...lines.map((l) => measureRich(ctx, l, size, labelFont)));
+  if (measured > maxW) size *= maxW / measured;
   ctx.fillStyle = style.text;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  lines.forEach((line, i) => ctx.fillText(line, 0, size * 0.06 + (i - (lines.length - 1) / 2) * size * 1.12));
+  lines.forEach((line, i) => drawRich(ctx, line, 0, size * 0.06 + (i - (lines.length - 1) / 2) * size * 1.12, size, labelFont, ['fill']));
 
   // Badges: a "?" on questions, a star on facts, ✓ / ✗ when revealing (shape, not just colour).
   const badgeR = c * 0.32;

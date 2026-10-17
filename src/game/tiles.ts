@@ -32,7 +32,8 @@ export function textWidthUnits(line: string): number {
     const cp = ch.codePointAt(0) ?? 0;
     // Emoji pictures (🍎 🔴) and symbol-emoji (⚪ ☝ ✌) are wide; variation selectors take no space.
     if (cp === 0xfe0f) continue;
-    units += cp >= 0x1f000 || (cp >= 0x2600 && cp <= 0x27bf) ? 1.15 : 0.6;
+    // A "?" is drawn in its own box (the missing part of a question), so it takes more room.
+    units += cp >= 0x1f000 || (cp >= 0x2600 && cp <= 0x27bf) ? 1.15 : ch === '?' ? 1.1 : 0.6;
   }
   return units;
 }
