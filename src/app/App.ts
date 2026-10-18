@@ -15,6 +15,7 @@ import { MenuController } from './controllers/MenuController';
 import { NUMBER_GARDEN } from '../worlds/worlds';
 import { ProfileController } from './controllers/ProfileController';
 import { DebugOverlay, debugRequested } from './debug/DebugOverlay';
+import { PlaytestStore } from './debug/playtest';
 import { WardrobeController } from './controllers/WardrobeController';
 import { ProfileService } from './services/ProfileService';
 import { ProgressService } from './services/ProgressService';
@@ -71,6 +72,8 @@ export class App implements Navigator {
   private readonly profiles: ProfileService;
   private readonly profileScreens: ProfileController;
   private readonly games: GameController;
+  /** Playtest switches; only read or changed when the page is opened with ?debug. */
+  private readonly playtest = new PlaytestStore(debugRequested());
   private readonly backdrop: BackdropController;
   /** Where "Done" in Options returns to. */
   private optionsFromPause = false;
@@ -96,7 +99,7 @@ export class App implements Navigator {
     this.profiles = new ProfileService(this.storage);
     this.profileScreens = new ProfileController(this, this.ui, this.audio, this.profiles);
     this.menus = new MenuController(this, this.ui, this.audio, this.settings, this.progress, this.rewards, this.profiles);
-    this.games = new GameController(this, this.ui, this.audio, this.renderer, this.settings, this.progress, this.rewards);
+    this.games = new GameController(this, this.ui, this.audio, this.renderer, this.settings, this.progress, this.rewards, this.playtest);
     this.wardrobe = new WardrobeController(this, this.ui, this.audio, this.rewards);
     this.backdrop = new BackdropController(this.renderer, () => this.rewards.skin());
 
@@ -139,6 +142,8 @@ export class App implements Navigator {
     this.debug = new DebugOverlay({
       resetLearning: () => this.resetActivePlayer(false),
       resetEverything: () => this.resetActivePlayer(true),
+      playtest: () => this.playtest.settings,
+      setPlaytest: (change) => this.playtest.update(change),
     });
   }
 

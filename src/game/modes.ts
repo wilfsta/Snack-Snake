@@ -28,6 +28,11 @@ export interface ModeRules {
    * more slowly: still Snake, but nothing rushes them.
    */
   readonly thinkingSlowdown: number;
+  /**
+   * Playtesting alternative: Sid stops completely while the child thinks, then carries on when
+   * the answers appear. Off unless a playtester turns it on.
+   */
+  readonly thinkingStill?: boolean;
 }
 
 /** Player-chosen options (from the Options menu). */

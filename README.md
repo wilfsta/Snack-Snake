@@ -31,7 +31,7 @@ npm run preview  # serve the production build (also LAN-accessible)
 
 Menus are navigable with arrows/D-pad. Press a controller button once if the browser hasn't detected it yet.
 
-**Playtesting:** add `?debug` to the address (e.g. `http://localhost:5173/?debug`) to see what the learning engine is thinking – frontier, confidence, which skill groups are secure/assumed, and why each question was asked. It has buttons to reset the current player. Press ` (backtick) to fold it away. Children never see it.
+**Playtesting:** add `?debug` to the address (e.g. `http://localhost:5173/?debug`) to see what the learning engine is thinking – frontier, confidence, which skill groups are secure/assumed, and why each question was asked. It has buttons to reset the current player. Press ` (backtick) to fold it away. Children never see it. It also has **playtest switches** for trying versions of the Garden with a real child: Sid slows down vs stops while the child thinks, thinking time 50–200%, and 2, 3 or 4 answers. They apply from the next Garden visit, are kept on that device only, and are ignored without `?debug`.
 
 ## Architecture
 

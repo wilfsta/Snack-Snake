@@ -1899,3 +1899,46 @@ button:focus-visible,
   text-align: center;
   line-height: 1;
 }
+
+/* Playtest switches inside the debug panel. */
+.debug-playtest {
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid rgba(62, 193, 255, 0.4);
+  display: grid;
+  gap: 5px;
+}
+
+.debug-note {
+  color: #ffd54a;
+}
+
+.debug-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.debug-row > span {
+  min-width: 128px;
+}
+
+.debug-row button {
+  font: inherit;
+  color: #cfe9ff;
+  background: transparent;
+  border: 1px solid rgba(62, 193, 255, 0.6);
+  border-radius: 6px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.debug-row button.on {
+  color: #0a0c1e;
+  background: #3ec1ff;
+  font-weight: 700;
+}
+
+.debug-overlay.collapsed .debug-playtest {
+  display: none;
+}

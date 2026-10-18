@@ -43,3 +43,10 @@ export function thinkingTimeFor(rec: MasteryRecord, stage: ChallengeStage, pacin
       return t.learning;
   }
 }
+
+/** The same pacing with every thinking time multiplied by `factor` (for playtesting). */
+export function scalePacing(pacing: PacingConfig, factor: number): PacingConfig {
+  const scale = (ms: number) => Math.round(ms * factor);
+  const t = pacing.thinkingMs;
+  return { thinkingMs: { new: scale(t.new), learning: scale(t.learning), practising: scale(t.practising), mastered: scale(t.mastered) } };
+}

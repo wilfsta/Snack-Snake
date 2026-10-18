@@ -1,4 +1,5 @@
 import type { CurriculumDebugInfo } from '../../learning/CurriculumSession';
+import { GARDEN_ANSWER_CHOICES, THINKING_SCALES, type PlaytestSettings } from './playtest';
 
 export interface DebugView {
   readonly player: string;
@@ -14,6 +15,8 @@ export interface DebugView {
 export interface DebugActions {
   resetLearning(): void;
   resetEverything(): void;
+  playtest(): PlaytestSettings;
+  setPlaytest(change: Partial<PlaytestSettings>): void;
 }
 
 /** Only exists when the page is opened with "?debug" in the address. */
@@ -37,6 +40,7 @@ export class DebugOverlay {
   private readonly body: HTMLElement;
   private lastRender = 0;
   private lastKey = '';
+  private readonly playtestBox: HTMLElement;
 
   constructor(actions: DebugActions) {
     this.root = document.createElement('aside');
@@ -56,7 +60,10 @@ export class DebugOverlay {
     bar.append(title, learn, all, hide);
     this.body = document.createElement('pre');
     this.body.className = 'debug-body';
-    this.root.append(bar, this.body);
+    this.playtestBox = document.createElement('div');
+    this.playtestBox.className = 'debug-playtest';
+    this.renderPlaytest(actions);
+    this.root.append(bar, this.playtestBox, this.body);
     document.body.append(this.root);
     window.addEventListener('keydown', (e) => {
       if (e.key === '`') this.root.classList.toggle('collapsed');
@@ -73,6 +80,48 @@ export class DebugOverlay {
       onClick();
     });
     return b;
+  }
+
+  /**
+   * Playtest switches for comparing versions with a real child. They apply from the next
+   * Number Garden visit (go back to the menu and press play again).
+   */
+  private renderPlaytest(actions: DebugActions): void {
+    const now = actions.playtest();
+    const row = (label: string, choices: readonly { text: string; active: boolean; pick: () => void }[]) => {
+      const line = document.createElement('div');
+      line.className = 'debug-row';
+      const name = document.createElement('span');
+      name.textContent = label;
+      line.append(name);
+      for (const c of choices) {
+        const b = this.button(c.text, () => {
+          c.pick();
+          this.renderPlaytest(actions);
+        });
+        if (c.active) b.classList.add('on');
+        line.append(b);
+      }
+      return line;
+    };
+    const note = document.createElement('div');
+    note.className = 'debug-note';
+    note.textContent = 'Playtest – applies from the next Garden visit';
+    this.playtestBox.replaceChildren(
+      note,
+      row('Sid while thinking', [
+        { text: 'Slows down', active: now.sidWhileThinking === 'slow', pick: () => actions.setPlaytest({ sidWhileThinking: 'slow' }) },
+        { text: 'Stops', active: now.sidWhileThinking === 'stop', pick: () => actions.setPlaytest({ sidWhileThinking: 'stop' }) },
+      ]),
+      row(
+        'Thinking time',
+        THINKING_SCALES.map((f) => ({ text: `${Math.round(f * 100)}%`, active: now.thinkingScale === f, pick: () => actions.setPlaytest({ thinkingScale: f }) })),
+      ),
+      row(
+        'Garden answers',
+        GARDEN_ANSWER_CHOICES.map((n) => ({ text: String(n), active: now.gardenAnswers === n, pick: () => actions.setPlaytest({ gardenAnswers: n }) })),
+      ),
+    );
   }
 
   /** Cheap to call every frame; redraws a few times a second at most. */

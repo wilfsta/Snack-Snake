@@ -15,6 +15,8 @@ import { DEFAULT_SKIN, type SnakeSkin } from '../../render/skins';
 import { WARDROBE } from '../../rewards/catalog';
 import { STAR_RULES } from '../../rewards/economy';
 import type { RewardService } from '../services/RewardService';
+import { scalePacing } from '../../learning/pacing';
+import { PlaytestStore } from '../debug/playtest';
 import type { UIManager } from '../../ui/UIManager';
 import { worldById, type WorldDefinition } from '../../worlds/worlds';
 import type { ProgressService } from '../services/ProgressService';
@@ -68,6 +70,7 @@ export class GameController {
     private readonly settings: SettingsService,
     private readonly progress: ProgressService,
     private readonly rewards: RewardService,
+    private readonly playtest: PlaytestStore = new PlaytestStore(false),
   ) {}
 
   get active(): boolean {
@@ -113,9 +116,9 @@ export class GameController {
       warmupFood = this.progress.isOnboarded(world.id) ? 0 : world.onboardingApples;
       source = engine.createCurriculumSession(world.curriculum, world.visitLength, {
         onStateChange,
-        answerCount: world.answerCount,
+        answerCount: this.playtest.active ? this.playtest.settings.gardenAnswers : world.answerCount,
         onGroupsPassed: (groupIds) => this.onGroupsPassed(groupIds),
-        pacing: world.pacing,
+        pacing: scalePacing(world.pacing, this.playtest.settings.thinkingScale),
       });
     } else if (spec.mode === 'learn') {
       source = engine.createLearnSession(spec.unitId, LEARN_SESSION_LENGTH, { onStateChange, answerCount: options.answerCount });
@@ -125,7 +128,8 @@ export class GameController {
 
     const { cols, rows } = chooseArenaSize(this.renderer.aspect);
     const session = new SnakeSession({
-      rules: buildRules(spec.mode, options),
+      // Playtest switch (only with ?debug): Sid can stand still while the child thinks.
+      rules: { ...buildRules(spec.mode, options), thinkingStill: world !== null && this.playtest.settings.sidWhileThinking === 'stop' },
       source: source ?? undefined,
       warmupFood,
       cols,

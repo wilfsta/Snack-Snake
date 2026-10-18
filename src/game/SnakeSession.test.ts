@@ -315,6 +315,24 @@ describe('SnakeSession', () => {
     expect(answered && answered.type === 'answered' && answered.responseMs).toBeGreaterThanOrEqual(0);
   });
 
+  it('playtest option: Sid can stand still while the child thinks, then carries on', () => {
+    const source = new FakeSource();
+    const original = source.next.bind(source);
+    source.next = () => ({ ...original(), thinkingTimeMs: 1500 });
+    const { session } = makeSession({ ...buildRules('garden'), thinkingStill: true }, source);
+    waitFor(session, 'seek');
+    steerTo(session, session.tiles[0]);
+    expect(session.phase.kind).toBe('think');
+    expect(session.isMoving).toBe(false);
+    const head = { ...session.snake.head };
+    session.update(1400);
+    expect(session.snake.head).toEqual(head);
+    session.update(150);
+    expect(session.tiles).toHaveLength(5);
+    waitFor(session, 'answer');
+    expect(session.isMoving).toBe(true);
+  });
+
   it('without a thinking time, answers appear straight away (Play and Learn are unchanged)', () => {
     const { session } = makeSession(PLAY_RULES);
     waitFor(session, 'seek');

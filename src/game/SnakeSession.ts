@@ -200,7 +200,8 @@ export class SnakeSession implements SnakeWorld {
 
   get isMoving(): boolean {
     const k = this.currentPhase.kind;
-    return k === 'seek' || k === 'think' || k === 'answer' || k === 'transition';
+    if (k === 'think') return !this.rules.thinkingStill;
+    return k === 'seek' || k === 'answer' || k === 'transition';
   }
 
   get isFinished(): boolean {
