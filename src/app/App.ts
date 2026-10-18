@@ -153,6 +153,8 @@ export class App implements Navigator {
         p.worldVisits = {};
         p.highScores = {};
         p.bestStreaks = {};
+        // Like a brand-new player: the warm-up apples come back too.
+        p.onboarded = [];
       }
     }, true);
     this.reloadPlayer();
