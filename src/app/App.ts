@@ -11,12 +11,15 @@ import { createBestAvailableStore, StorageManager } from '../storage/StorageMana
 import { UIManager } from '../ui/UIManager';
 import { BackdropController } from './controllers/BackdropController';
 import { GameController } from './controllers/GameController';
+import { GrownUpController } from './controllers/GrownUpController';
 import { MenuController } from './controllers/MenuController';
 import { NUMBER_GARDEN } from '../worlds/worlds';
 import { ProfileController } from './controllers/ProfileController';
 import { DebugOverlay, debugRequested } from './debug/DebugOverlay';
 import { PlaytestStore } from './debug/playtest';
+import { PlaytestLog } from './debug/playtestLog';
 import { WardrobeController } from './controllers/WardrobeController';
+import { BackupService } from './services/BackupService';
 import { ProfileService } from './services/ProfileService';
 import { ProgressService } from './services/ProgressService';
 import { RewardService } from './services/RewardService';
@@ -74,6 +77,7 @@ export class App implements Navigator {
   private readonly games: GameController;
   /** Playtest switches; only read or changed when the page is opened with ?debug. */
   private readonly playtest = new PlaytestStore(debugRequested());
+  private readonly playtestLog = new PlaytestLog(debugRequested());
   private readonly backdrop: BackdropController;
   /** Where "Done" in Options returns to. */
   private optionsFromPause = false;
@@ -98,8 +102,12 @@ export class App implements Navigator {
     this.rewards = new RewardService(this.storage);
     this.profiles = new ProfileService(this.storage);
     this.profileScreens = new ProfileController(this, this.ui, this.audio, this.profiles);
-    this.menus = new MenuController(this, this.ui, this.audio, this.settings, this.progress, this.rewards, this.profiles);
-    this.games = new GameController(this, this.ui, this.audio, this.renderer, this.settings, this.progress, this.rewards, this.playtest);
+    const grownUps = new GrownUpController(this, this.ui, this.audio, this.progress, this.profiles, new BackupService(this.storage));
+    this.menus = new MenuController(this, this.ui, this.audio, this.settings, this.progress, this.rewards, this.profiles, grownUps);
+    this.games = new GameController(this, this.ui, this.audio, this.renderer, this.settings, this.progress, this.rewards, this.playtest, this.playtestLog, () => {
+      const p = this.profiles.get(this.profiles.activeId);
+      return p ? `${p.avatar} ${p.name}` : '?';
+    });
     this.wardrobe = new WardrobeController(this, this.ui, this.audio, this.rewards);
     this.backdrop = new BackdropController(this.renderer, () => this.rewards.skin());
 
@@ -144,6 +152,9 @@ export class App implements Navigator {
       resetEverything: () => this.resetActivePlayer(true),
       playtest: () => this.playtest.settings,
       setPlaytest: (change) => this.playtest.update(change),
+      notes: () => this.playtestLog.notes,
+      commentOnLastVisit: (text) => this.playtestLog.comment(text),
+      clearNotes: () => this.playtestLog.clear(),
     });
   }
 
@@ -153,6 +164,7 @@ export class App implements Navigator {
     this.showMenu();
     this.storage.updateProfile((p) => {
       p.learning = null;
+      p.visit = null;
       if (everything) {
         p.rewards = null;
         p.worldVisits = {};

@@ -49,6 +49,17 @@ export interface ProfileSettings {
   answerCount: number | null;
 }
 
+/** A world visit left before its end (tab closed, back to the menu...), so the next visit carries on. */
+export interface UnfinishedVisit {
+  readonly worldId: string;
+  /** Questions and new things already done this visit. */
+  readonly done: number;
+  readonly stars: number;
+  readonly newPlants: number;
+  /** When it was last saved. */
+  readonly at: number;
+}
+
 /** Everything that belongs to one player. */
 export interface ProfileData {
   id: string;
@@ -64,6 +75,8 @@ export interface ProfileData {
   worldVisits: Record<string, number>;
   /** Worlds whose first-time onboarding (starter apples) this player has finished. */
   onboarded: string[];
+  /** The world visit this player left unfinished, if any. */
+  visit: UnfinishedVisit | null;
   /** Opaque to storage; the rewards module validates its own state (stars, wardrobe). */
   rewards: unknown;
   /** Opaque to storage; the learning module validates its own snapshot. */
@@ -97,6 +110,7 @@ export function newProfile(id: string, name: string, avatar: string, createdAt =
     bestStreaks: {},
     worldVisits: {},
     onboarded: [],
+    visit: null,
     rewards: null,
     learning: null,
   };
@@ -114,6 +128,15 @@ function numberRecord(raw: unknown): Record<string, number> {
     if (typeof v === 'number' && Number.isFinite(v) && v >= 0) out[k] = v;
   }
   return out;
+}
+
+const count = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+
+export function parseVisit(raw: unknown): UnfinishedVisit | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const v = raw as Record<string, unknown>;
+  if (typeof v.worldId !== 'string' || !v.worldId || typeof v.at !== 'number' || !Number.isFinite(v.at)) return null;
+  return { worldId: v.worldId, done: count(v.done), stars: count(v.stars), newPlants: count(v.newPlants), at: v.at };
 }
 
 function parseProfileSettings(raw: unknown): ProfileSettings {
@@ -153,6 +176,7 @@ export function parseProfile(raw: Record<string, unknown>, fallbackId: string): 
       ? raw.onboarded.filter((w): w is string => typeof w === 'string')
       : Object.entries(numberRecord(raw.worldVisits)).filter(([, n]) => n > 0).map(([w]) => w),
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : createdAt,
+    visit: parseVisit(raw.visit),
     rewards: raw.rewards ?? null,
     learning: raw.learning ?? null,
   };

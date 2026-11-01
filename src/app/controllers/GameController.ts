@@ -17,6 +17,7 @@ import { STAR_RULES } from '../../rewards/economy';
 import type { RewardService } from '../services/RewardService';
 import { scalePacing } from '../../learning/pacing';
 import { PlaytestStore } from '../debug/playtest';
+import { PlaytestLog, VisitRecorder } from '../debug/playtestLog';
 import type { UIManager } from '../../ui/UIManager';
 import { worldById, type WorldDefinition } from '../../worlds/worlds';
 import type { ProgressService } from '../services/ProgressService';
@@ -45,6 +46,10 @@ interface ActiveGame {
   stars: number;
   /** Garden plants that grew during this visit. */
   newPlants: number;
+  /** Questions done earlier in this visit, before it was interrupted (worlds only). */
+  readonly doneBefore: number;
+  /** What was last saved as the unfinished visit, to save only when it changes. */
+  savedVisit: string;
 }
 
 export interface FrameState {
@@ -61,6 +66,8 @@ export class GameController {
   private readonly animator = new SnakeAnimator();
   private readonly effects = new Effects();
   private skin: SnakeSkin = DEFAULT_SKIN;
+  /** Playtest notes on the current Garden visit (only with ?debug). */
+  private visitNotes: VisitRecorder | null = null;
 
   constructor(
     private readonly nav: Navigator,
@@ -71,6 +78,9 @@ export class GameController {
     private readonly progress: ProgressService,
     private readonly rewards: RewardService,
     private readonly playtest: PlaytestStore = new PlaytestStore(false),
+    private readonly playtestLog: PlaytestLog = new PlaytestLog(false),
+    /** Who is playing, for playtest notes. */
+    private readonly playerLabel: () => string = () => '',
   ) {}
 
   get active(): boolean {
@@ -110,11 +120,16 @@ export class GameController {
 
     let source: QuestionSource | null = null;
     let warmupFood = 0;
+    // A visit left unfinished a little while ago (tab closed, back to the menu) carries on where it was.
+    const carried = world ? this.progress.unfinishedVisit(world.id, world.visitLength) : null;
     if (world) {
-      this.progress.visitWorld(world.id);
+      if (!carried) {
+        this.progress.clearVisit();
+        this.progress.visitWorld(world.id);
+      }
       // Starter apples only until a player has finished them once; returning players go straight to maths.
       warmupFood = this.progress.isOnboarded(world.id) ? 0 : world.onboardingApples;
-      source = engine.createCurriculumSession(world.curriculum, world.visitLength, {
+      source = engine.createCurriculumSession(world.curriculum, world.visitLength - (carried?.done ?? 0), {
         onStateChange,
         answerCount: this.playtest.active ? this.playtest.settings.gardenAnswers : world.answerCount,
         onGroupsPassed: (groupIds) => this.onGroupsPassed(groupIds),
@@ -136,7 +151,18 @@ export class GameController {
       rows,
       onEvent: (event) => this.onSessionEvent(event),
     });
-    this.game = { spec, session, source, world, newlyMastered: 0, stars: 0, newPlants: 0 };
+    this.game = {
+      spec,
+      session,
+      source,
+      world,
+      newlyMastered: 0,
+      stars: carried?.stars ?? 0,
+      newPlants: carried?.newPlants ?? 0,
+      doneBefore: carried?.done ?? 0,
+      savedVisit: '',
+    };
+    this.visitNotes = world && this.playtestLog.active ? new VisitRecorder(this.playerLabel(), this.playtest.settings, carried !== null) : null;
     this.skin = this.rewards.skin();
     this.animator.reset(directionAngle(session.snake.direction));
     this.effects.clear();
@@ -145,6 +171,7 @@ export class GameController {
 
   stop(): void {
     this.game = null;
+    this.visitNotes = null;
     this.ui.hideTeaching();
     this.ui.setHudVisible(false);
     this.settings.updateTouchVisibility();
@@ -200,6 +227,8 @@ export class GameController {
   showSessionComplete(): void {
     const game = this.game;
     if (!game) return;
+    if (game.world) this.progress.clearVisit();
+    if (game.world && this.visitNotes) this.playtestLog.save(this.visitNotes.finish());
     this.progress.flush();
     this.audio.play('learnAchievement');
     if (game.world) {
@@ -291,6 +320,7 @@ export class GameController {
     const v = DIRECTION_VECTORS[session.snake.direction];
     const mouth = { x: headCenter.x + v.x * 0.45, y: headCenter.y + v.y * 0.45 };
     const inWorld = game.world !== null;
+    if (this.visitNotes?.observe(event)) this.playtestLog.save(this.visitNotes.current);
 
     switch (event.type) {
       case 'questionEaten':
@@ -402,6 +432,7 @@ export class GameController {
     if (!game) return;
     const session = game.session;
     if (frame.playing) session.update(dtMs);
+    this.saveVisit(game);
     const hint = session.hintTile;
     const phase = session.phase.kind;
     this.animator.update({
@@ -416,6 +447,17 @@ export class GameController {
       streak: session.score.streak,
     });
     this.effects.update(dtMs / 1000);
+  }
+
+  /** In a world, keeps the visit so far saved, so it can carry on if the page is closed. */
+  private saveVisit(game: ActiveGame): void {
+    if (!game.world || !game.source || game.session.phase.kind === 'complete') return;
+    const done = game.doneBefore + game.source.completedCount;
+    if (done === 0 || done >= game.world.visitLength) return;
+    const key = `${done}/${game.stars}/${game.newPlants}`;
+    if (key === game.savedVisit) return;
+    game.savedVisit = key;
+    this.progress.saveVisit({ worldId: game.world.id, done, stars: game.stars, newPlants: game.newPlants });
   }
 
   render(): void {

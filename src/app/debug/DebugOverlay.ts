@@ -1,5 +1,6 @@
 import type { CurriculumDebugInfo } from '../../learning/CurriculumSession';
 import { GARDEN_ANSWER_CHOICES, THINKING_SCALES, type PlaytestSettings } from './playtest';
+import { formatNote, type VisitNote } from './playtestLog';
 
 export interface DebugView {
   readonly player: string;
@@ -17,6 +18,9 @@ export interface DebugActions {
   resetEverything(): void;
   playtest(): PlaytestSettings;
   setPlaytest(change: Partial<PlaytestSettings>): void;
+  notes(): readonly VisitNote[];
+  commentOnLastVisit(text: string): void;
+  clearNotes(): void;
 }
 
 /** Only exists when the page is opened with "?debug" in the address. */
@@ -27,6 +31,9 @@ export function debugRequested(): boolean {
     return false;
   }
 }
+
+/** How many visits the panel lists (Copy takes them all). */
+const NOTES_SHOWN = 3;
 
 const STATUS_MARK = { secure: '■', assumed: '◆', open: '·' } as const;
 const KIND_LABEL: Readonly<Record<string, string>> = { probe: 'check', recheck: 're-check', learn: 'learn', review: 'review', comeback: 'again' };
@@ -41,6 +48,9 @@ export class DebugOverlay {
   private lastRender = 0;
   private lastKey = '';
   private readonly playtestBox: HTMLElement;
+  private readonly notesBox: HTMLElement;
+  private readonly notesList: HTMLElement;
+  private lastNotesKey = '';
 
   constructor(actions: DebugActions) {
     this.root = document.createElement('aside');
@@ -63,7 +73,10 @@ export class DebugOverlay {
     this.playtestBox = document.createElement('div');
     this.playtestBox.className = 'debug-playtest';
     this.renderPlaytest(actions);
-    this.root.append(bar, this.playtestBox, this.body);
+    this.notesList = document.createElement('div');
+    this.notesList.className = 'debug-notes-list';
+    this.notesBox = this.buildNotes(actions);
+    this.root.append(bar, this.playtestBox, this.notesBox, this.body);
     document.body.append(this.root);
     window.addEventListener('keydown', (e) => {
       if (e.key === '`') this.root.classList.toggle('collapsed');
@@ -124,11 +137,77 @@ export class DebugOverlay {
     );
   }
 
+  /** Notes on recent Garden visits, a comment on the latest, and Copy to take them away. */
+  private buildNotes(actions: DebugActions): HTMLElement {
+    const box = document.createElement('div');
+    box.className = 'debug-playtest debug-visits';
+    const title = document.createElement('div');
+    title.className = 'debug-note';
+    title.textContent = 'Visit notes';
+    const comment = this.button('Note on last visit', () => {
+      const last = actions.notes().at(-1);
+      if (!last) return;
+      const text = window.prompt('What did you notice in the last visit?', last.note);
+      if (text !== null) actions.commentOnLastVisit(text);
+      this.renderNotes(actions.notes(), true);
+    });
+    const copy = this.button('Copy all', () => {
+      const text = actions.notes().map(formatNote).join('\n');
+      if (!text) return;
+      // No clipboard access (e.g. not https): show the text so it can be copied by hand.
+      const byHand = () => window.prompt('Copy these notes:', text);
+      if (!navigator.clipboard) {
+        byHand();
+        return;
+      }
+      navigator.clipboard.writeText(text).then(() => {
+        copy.textContent = 'Copied ✓';
+        setTimeout(() => (copy.textContent = 'Copy all'), 1500);
+      }, byHand);
+    });
+    const clear = this.button('Clear', () => {
+      if (!window.confirm('Delete all visit notes on this device?')) return;
+      actions.clearNotes();
+      this.renderNotes(actions.notes(), true);
+    });
+    const row = document.createElement('div');
+    row.className = 'debug-row';
+    row.append(comment, copy, clear);
+    box.append(title, this.notesList, row);
+    this.notesActions = actions;
+    this.renderNotes(actions.notes(), true);
+    return box;
+  }
+
+  private notesActions: DebugActions | null = null;
+
+  private renderNotes(notes: readonly VisitNote[], force = false): void {
+    const key = notes.length === 0 ? '' : `${notes.length}/${notes.at(-1)?.endedAt}/${notes.at(-1)?.note}`;
+    if (!force && key === this.lastNotesKey) return;
+    this.lastNotesKey = key;
+    const lines = notes.slice(-NOTES_SHOWN).map((n) => {
+      const line = document.createElement('div');
+      line.textContent = formatNote(n);
+      return line;
+    });
+    if (lines.length === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = 'None yet – each Garden visit is noted here.';
+      lines.push(empty);
+    } else if (notes.length > NOTES_SHOWN) {
+      const more = document.createElement('div');
+      more.textContent = `(+${notes.length - NOTES_SHOWN} earlier)`;
+      lines.unshift(more);
+    }
+    this.notesList.replaceChildren(...lines);
+  }
+
   /** Cheap to call every frame; redraws a few times a second at most. */
   update(view: DebugView): void {
     const now = performance.now();
     if (now - this.lastRender < 250) return;
     this.lastRender = now;
+    if (this.notesActions) this.renderNotes(this.notesActions.notes());
     const text = format(view);
     if (text === this.lastKey) return;
     this.lastKey = text;

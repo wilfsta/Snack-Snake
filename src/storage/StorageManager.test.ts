@@ -141,7 +141,7 @@ describe('onboarding, sync shape and resuming', () => {
     });
     const record = toSyncRecord(storage.profile);
     expect(record).toMatchObject({ schema: 1, id: storage.profile.id, name: 'Mo', game: { onboarded: ['garden'] } });
-    expect(Object.keys(record.game).sort()).toEqual(['bestStreaks', 'highScores', 'onboarded', 'rewards', 'settings', 'worldVisits']);
+    expect(Object.keys(record.game).sort()).toEqual(['bestStreaks', 'highScores', 'onboarded', 'rewards', 'settings', 'visit', 'worldVisits']);
     const back = fromSyncRecord(JSON.parse(JSON.stringify(record)));
     expect(back).toEqual(storage.profile);
     expect(fromSyncRecord({ schema: 99, id: 'x' })).toBeNull();

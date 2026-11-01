@@ -1,11 +1,12 @@
-import { parseProfile, type ProfileData, type ProfileSettings } from './StorageManager';
+import { parseProfile, type ProfileData, type ProfileSettings, type UnfinishedVisit } from './StorageManager';
 
 /**
  * The shape a player profile would take when synchronised with a future backend/cloud account.
  * Nothing uses a server yet; this simply fixes the boundary so local profiles can later be
  * uploaded/downloaded without touching the learning system.
  *
- *  - `game`: ordinary game progress (settings, scores, world visits, onboarding, rewards/outfits)
+ *  - `game`: ordinary game progress (settings, scores, world visits, onboarding, an unfinished
+ *    visit, rewards/outfits)
  *  - `learning`: the learning engine's own snapshot (mastery per fact, accuracy, response times,
  *    placement and provisional skills). Opaque here; the learning module validates it.
  *  - `updatedAt`: lets a sync service keep the newest copy or detect conflicts.
@@ -25,6 +26,7 @@ export interface ProfileSyncRecord {
     readonly bestStreaks: Readonly<Record<string, number>>;
     readonly worldVisits: Readonly<Record<string, number>>;
     readonly onboarded: readonly string[];
+    readonly visit?: UnfinishedVisit | null;
     readonly rewards: unknown;
   };
   readonly learning: unknown;
@@ -44,6 +46,7 @@ export function toSyncRecord(p: ProfileData): ProfileSyncRecord {
       bestStreaks: { ...p.bestStreaks },
       worldVisits: { ...p.worldVisits },
       onboarded: [...p.onboarded],
+      visit: p.visit,
       rewards: p.rewards,
     },
     learning: p.learning,

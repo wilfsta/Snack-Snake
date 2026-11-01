@@ -1,6 +1,8 @@
 import type { Direction } from '../core/geometry';
 import type { GameModeId } from '../game/modes';
 import type { MasteryState } from '../learning/mastery';
+import type { PracticeReason } from '../learning/practice';
+import type { ProgressReport, SkillStatus } from '../learning/report';
 import type { TouchControlsPreference } from '../storage/StorageManager';
 import { button, el } from './dom';
 import { findNeighbour } from './spatialNav';
@@ -121,6 +123,8 @@ export interface OptionsView {
   readonly minAnswers: number;
   readonly maxAnswers: number;
   readonly inGame: boolean;
+  /** Whose progress the grown-ups' buttons are about. */
+  readonly playerName: string;
 }
 
 export interface OptionsHandlers {
@@ -128,7 +132,38 @@ export interface OptionsHandlers {
   onWalls(walls: 'wrap' | 'solid'): void;
   onAnswers(count: number): void;
   onBack(): void;
+  /** Grown-ups' tools; only offered outside a game. */
+  onProgress(): void;
+  onSaveBackup(): void;
+  onLoadBackup(): void;
 }
+
+export interface ProgressReportView {
+  readonly playerName: string;
+  readonly avatar: string;
+  readonly visits: number;
+  readonly report: ProgressReport;
+}
+
+export interface NoticeView {
+  readonly icon: string;
+  readonly title: string;
+  readonly lines: readonly string[];
+}
+
+const SKILL_STATUS: Readonly<Record<SkillStatus, { icon: string; label: string }>> = {
+  secure: { icon: '✅', label: 'Learnt' },
+  assumed: { icon: '👍', label: 'Already knew' },
+  learning: { icon: '🌱', label: 'Learning now' },
+  started: { icon: '🔸', label: 'Started' },
+  'not-started': { icon: '·', label: 'Not yet' },
+};
+
+const PRACTICE_REASON: Readonly<Record<PracticeReason, string>> = {
+  struggling: 'often wrong lately',
+  shaky: 'wrong last time',
+  rusty: 'not seen for a while',
+};
 
 export interface GameOverView {
   readonly title: string;
@@ -431,6 +466,21 @@ export class UIManager {
         ),
         this.settingsRow(null, true),
         view.inGame ? el('p', { class: 'option-note', text: 'Speed and edges change from the next game.' }) : null,
+        view.inGame
+          ? null
+          : el(
+              'div',
+              { class: 'option-group grown-ups' },
+              el('div', { class: 'option-label' }, el('span', { text: 'For grown-ups' })),
+              el(
+                'div',
+                { class: 'grown-up-buttons' },
+                button(`📊 How ${view.playerName} is doing`, 'small-btn', handlers.onProgress),
+                button('💾 Save a backup', 'small-btn', handlers.onSaveBackup),
+                button('📂 Load a backup', 'small-btn', handlers.onLoadBackup),
+              ),
+              el('p', { class: 'option-note', text: 'Progress is kept in this browser only. A backup file keeps it safe and moves it to another device.' }),
+            ),
         button('✓ Done', 'big-btn primary', handlers.onBack),
       ),
     );
@@ -758,6 +808,99 @@ export class UIManager {
       ),
     );
     this.show(screen, onCancel);
+  }
+
+  /** A message for grown-ups with a single OK. */
+  showNotice(view: NoticeView, onOk: () => void): void {
+    const screen = el(
+      'div',
+      { class: 'screen overlay-screen' },
+      el(
+        'div',
+        { class: 'card' },
+        el('div', { class: 'confirm-icon', text: view.icon, attrs: { 'aria-hidden': 'true' } }),
+        el('h2', { class: 'notice-title', text: view.title }),
+        ...view.lines.map((line) => el('p', { class: 'muted', text: line })),
+        button('✓ OK', 'big-btn primary', onOk, { 'data-autofocus': '' }),
+      ),
+    );
+    this.show(screen, onOk);
+  }
+
+  /** What a child knows and what needs practice, in grown-up words. Children never get here by accident. */
+  showProgressReport(view: ProgressReportView, onBack: () => void): void {
+    const r = view.report;
+    const pct = r.unaidedAnswers > 0 ? Math.round((r.unaidedCorrect / r.unaidedAnswers) * 100) : null;
+    const summary = [
+      `${r.skillsPassed} of ${r.skillCount} skills`,
+      `${view.visits} ${view.visits === 1 ? 'visit' : 'visits'}`,
+      pct === null ? null : `${pct}% right without help`,
+    ].filter(Boolean);
+
+    const stages = r.stages.map((stage) =>
+      el(
+        'section',
+        { class: 'report-stage' },
+        el('h3', { text: stage.title }),
+        el(
+          'ul',
+          { class: 'report-skills' },
+          ...stage.skills.map((s) => {
+            const status = SKILL_STATUS[s.status];
+            return el(
+              'li',
+              { class: `report-skill ${s.status}` },
+              el('span', { class: 'report-skill-name', text: s.title }),
+              el('span', { class: 'report-skill-status', text: `${status.icon} ${status.label}` }),
+              s.status === 'learning' || s.status === 'started' ? el('span', { class: 'report-skill-count', text: `${s.known}/${s.size}` }) : null,
+            );
+          }),
+        ),
+      ),
+    );
+
+    const practice =
+      r.practice.length > 0
+        ? el('ul', { class: 'report-practice' }, ...r.practice.map((p) => el('li', {}, el('strong', { text: p.label }), ` – ${PRACTICE_REASON[p.reason]}`)))
+        : el('p', { class: 'option-note', text: r.unaidedAnswers > 0 ? 'Nothing worrying at the moment.' : 'This fills in as they play.' });
+
+    const others =
+      r.otherUnits.length > 0
+        ? el(
+            'section',
+            { class: 'report-stage' },
+            el('h3', { text: 'Other practice' }),
+            el(
+              'ul',
+              { class: 'report-skills' },
+              ...r.otherUnits.map((u) =>
+                el('li', { class: 'report-skill' }, el('span', { class: 'report-skill-name', text: u.title }), el('span', { class: 'report-skill-status', text: `${u.mastered}/${u.size} mastered` })),
+              ),
+            ),
+          )
+        : null;
+
+    const screen = el(
+      'div',
+      { class: 'screen overlay-screen' },
+      el(
+        'div',
+        { class: 'card wide-card options-card report-card' },
+        el('h2', { class: 'report-title', text: `${view.avatar} ${view.playerName}` }),
+        el('p', { class: 'option-note', text: summary.join(' · ') }),
+        el(
+          'div',
+          { class: 'report-body', attrs: { tabindex: '0', 'aria-label': 'Progress report' } },
+          el('section', { class: 'report-stage' }, el('h3', { text: 'Needs more practice' }), practice),
+          el('h3', { class: 'report-heading', text: r.curriculumTitle }),
+          ...stages,
+          others,
+          el('p', { class: 'option-note', text: '“Already knew” means Sid checked a few questions and skipped ahead. He keeps re-checking, and teaches it properly if it turns out to be shaky.' }),
+        ),
+        button('◀ Back', 'big-btn primary', onBack, { 'data-autofocus': '' }),
+      ),
+    );
+    this.show(screen, onBack);
   }
 
   /** End of a garden visit: stars earned, the garden (new plants pop in), and Sid's shopping. No reading needed. */

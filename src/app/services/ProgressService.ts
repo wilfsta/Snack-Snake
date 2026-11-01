@@ -2,7 +2,10 @@ import { createContentLibrary, type ContentLibrary } from '../../content/Content
 import { highScoreKey, isNewHighScore } from '../../game/scoring';
 import { LearningEngine } from '../../learning/LearningEngine';
 import { LearningTracker } from '../../learning/LearningTracker';
-import type { StorageManager } from '../../storage/StorageManager';
+import type { StorageManager, UnfinishedVisit } from '../../storage/StorageManager';
+
+/** An unfinished visit is carried on only if the child comes back within this time (same sitting). */
+export const VISIT_RESUME_MS = 3 * 60 * 60 * 1000;
 
 /**
  * Everything the active player has achieved: learning progress, high scores and world visits.
@@ -59,6 +62,11 @@ export class ProgressService {
     return { previous, newBest };
   }
 
+  /** Times this player has entered a world. */
+  worldVisits(worldId: string): number {
+    return this.storage.profile.worldVisits[worldId] ?? 0;
+  }
+
   /** Records entering a world. Returns how many times it had been visited before. */
   visitWorld(worldId: string): number {
     const before = this.storage.profile.worldVisits[worldId] ?? 0;
@@ -74,6 +82,26 @@ export class ProgressService {
   markOnboarded(worldId: string): void {
     if (this.isOnboarded(worldId)) return;
     this.storage.updateProfile((p) => p.onboarded.push(worldId), true);
+  }
+
+  /**
+   * The visit to carry on with in this world, if the player left one unfinished not long ago.
+   * Anything older (or already complete) is a fresh start.
+   */
+  unfinishedVisit(worldId: string, visitLength: number, now = Date.now()): UnfinishedVisit | null {
+    const visit = this.storage.profile.visit;
+    if (!visit || visit.worldId !== worldId || visit.done <= 0 || visit.done >= visitLength) return null;
+    if (now - visit.at > VISIT_RESUME_MS || now < visit.at) return null;
+    return visit;
+  }
+
+  saveVisit(visit: Omit<UnfinishedVisit, 'at'>, now = Date.now()): void {
+    this.storage.updateProfile((p) => (p.visit = { ...visit, at: now }));
+  }
+
+  clearVisit(): void {
+    if (this.storage.profile.visit === null) return;
+    this.storage.updateProfile((p) => (p.visit = null), true);
   }
 
   flush(): void {

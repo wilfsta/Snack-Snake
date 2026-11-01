@@ -1209,6 +1209,85 @@ button:focus-visible,
   color: var(--accent-dark);
 }
 
+/* Grown-ups' tools in Options, and the progress report. */
+.grown-up-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.card h2.notice-title {
+  font-size: clamp(26px, 5vw, 36px);
+}
+
+.card h2.report-title {
+  font-size: clamp(28px, 6vw, 40px);
+}
+
+.report-body {
+  max-height: min(58vh, 520px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.report-body h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  color: var(--accent-dark);
+}
+
+.report-body h3.report-heading {
+  margin-top: 6px;
+  font-size: 20px;
+}
+
+.report-stage {
+  background: #f3f4ff;
+  border-radius: 14px;
+  padding: 8px 12px;
+}
+
+.report-skills,
+.report-practice {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 16px;
+}
+
+.report-skill {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.report-skill-status {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.report-skill.not-started {
+  color: var(--ink-soft);
+}
+
+.report-skill.learning .report-skill-status {
+  color: var(--learn-dark);
+}
+
+.report-skill-count {
+  color: var(--ink-soft);
+  font-size: 14px;
+  min-width: 3.2em;
+  text-align: right;
+}
+
 .option-note {
   margin: 0;
   color: var(--ink-soft);
@@ -1941,4 +2020,11 @@ button:focus-visible,
 
 .debug-overlay.collapsed .debug-playtest {
   display: none;
+}
+
+.debug-notes-list {
+  white-space: normal;
+  display: grid;
+  gap: 4px;
+  color: #cfe9ff;
 }
