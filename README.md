@@ -41,11 +41,11 @@ Menus are navigable with arrows/D-pad. Press a controller button once if the bro
 
 ## Publishing
 
-`npm run build` produces a static site in `dist/`: upload that folder to any static host (GitHub Pages, Netlify, Cloudflare Pages, your own server). Paths are relative, so it works at a domain root or in a subfolder. No server code or database is needed.
+**Live at https://wilfsta.github.io/Snack-Snake/** – every push to `main` runs the tests, builds and publishes it (`.github/workflows/deploy.yml`; GitHub Pages must be set to "GitHub Actions" under Settings → Pages). `npm run build` produces a static site in `dist/`: it can also be uploaded to any static host (GitHub Pages, Netlify, Cloudflare Pages, your own server). Paths are relative, so it works at a domain root or in a subfolder. No server code or database is needed.
 
 - **HTTPS** is required for the offline mode and "Add to Home Screen" (every host above provides it).
 - **Offline:** once opened, the game works without a connection (`public/sw.js`). New versions arrive the next time it's opened online. If you change `sw.js` itself in a way that must drop old caches, bump `CACHE` in it.
-- **Link previews:** some sites need an absolute address for the preview picture – once you know the final address, change `og:image` in `index.html` to the full URL of `og-image.png`.
+- **Link previews** use the full address of `og-image.png` (`og:image` in `index.html`); change it if the game moves.
 - Icons and the web app manifest are in `public/` (`icon.svg` is the source; the PNGs are rendered from it).
 
 ## Architecture
