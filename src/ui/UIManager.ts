@@ -3,7 +3,7 @@ import type { GameModeId } from '../game/modes';
 import type { MasteryState } from '../learning/mastery';
 import type { PracticeReason } from '../learning/practice';
 import type { ProgressReport, SkillStatus } from '../learning/report';
-import type { TouchControlsPreference } from '../storage/StorageManager';
+import type { PadSide, TouchControlsPreference } from '../storage/StorageManager';
 import { button, el } from './dom';
 import { findNeighbour } from './spatialNav';
 import { watchFractions } from './stackFractions';
@@ -242,6 +242,7 @@ export interface HudView {
 export interface UIHooks {
   onToggleMute(): void;
   onCycleTouchControls(): void;
+  onCyclePadSide(): void;
   onPauseButton(): void;
   onTeachingTap(): void;
   onFocusMove(): void;
@@ -264,6 +265,12 @@ const TOUCH_LABEL: Readonly<Record<TouchControlsPreference, string>> = {
   auto: 'Touch pad: Auto',
   on: 'Touch pad: On',
   off: 'Touch pad: Off',
+};
+
+const SIDE_LABEL: Readonly<Record<PadSide, string>> = {
+  auto: 'Pad side: Auto',
+  left: 'Pad side: ⬅ Left',
+  right: 'Pad side: Right ➡',
 };
 
 function $(id: string): HTMLElement {
@@ -291,6 +298,7 @@ export class UIManager {
   private hudCache = '';
   private muted = false;
   private touchPref: TouchControlsPreference = 'auto';
+  private padSide: PadSide = 'auto';
 
   private readonly hudUnit = $('hud-unit');
   private readonly hudScore = $('hud-score');
@@ -1167,7 +1175,12 @@ export class UIManager {
       'aria-pressed': String(!this.muted),
     });
     const row = el('div', { class: 'settings-row' }, mute);
-    if (includeTouch) row.append(button(TOUCH_LABEL[this.touchPref], 'small-btn touch-toggle', () => this.hooks.onCycleTouchControls()));
+    if (includeTouch) {
+      row.append(
+        button(TOUCH_LABEL[this.touchPref], 'small-btn touch-toggle', () => this.hooks.onCycleTouchControls()),
+        button(SIDE_LABEL[this.padSide], 'small-btn pad-side-toggle', () => this.hooks.onCyclePadSide()),
+      );
+    }
     if (onOptions) row.append(button('⚙ Options', 'small-btn', onOptions));
     return row;
   }
@@ -1225,6 +1238,13 @@ export class UIManager {
   setTouchPreference(pref: TouchControlsPreference): void {
     this.touchPref = pref;
     for (const b of document.querySelectorAll<HTMLButtonElement>('.touch-toggle')) b.textContent = TOUCH_LABEL[pref];
+  }
+
+  setPadSide(side: PadSide): void {
+    this.padSide = side;
+    this.app.classList.toggle('pad-left', side === 'left');
+    this.app.classList.toggle('pad-right', side === 'right');
+    for (const b of document.querySelectorAll<HTMLButtonElement>('.pad-side-toggle')) b.textContent = SIDE_LABEL[side];
   }
 
   setTouchControlsVisible(visible: boolean): void {

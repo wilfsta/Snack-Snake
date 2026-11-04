@@ -37,6 +37,8 @@ npm run preview  # serve the production build (also LAN-accessible)
 
 Menus are navigable with arrows/D-pad. Press a controller button once if the browser hasn't detected it yet.
 
+**Pad side:** Options → *Pad side* moves the on-screen pad for left- or right-handed children: **Auto** (centred below the board when upright, on the right when sideways), **Left** or **Right**. Each child keeps their own choice.
+
 **Playtesting:** add `?debug` to the address (e.g. `http://localhost:5173/?debug`) to see what the learning engine is thinking – frontier, confidence, which skill groups are secure/assumed, and why each question was asked. It has buttons to reset the current player. Press ` (backtick) to fold it away. Children never see it. It also has **playtest switches** for trying versions of the Garden with a real child: Sid slows down vs stops while the child thinks, thinking time 50–200%, and 2, 3 or 4 answers. They apply from the next Garden visit, are kept on that device only, and are ignored without `?debug`. **Visit notes** record each Garden visit (length, finished or not, right first time, hints, facts missed, bumps, the switches in use); add a comment on the last visit and **Copy all** to paste them anywhere.
 
 ## Publishing

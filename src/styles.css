@@ -298,6 +298,10 @@ button:focus-visible,
 .pad-btn.left { left: 2%; top: 31%; }
 .pad-btn.right { right: 2%; top: 31%; }
 
+/* Chosen pad side (Options → Pad side). Upright: pushed to that edge below the board. */
+#app.pad-left .touch-pad { justify-content: flex-start; }
+#app.pad-right .touch-pad { justify-content: flex-end; }
+
 @media (orientation: landscape) {
   #app.show-touch.in-game {
     grid-template-columns: 1fr auto;
@@ -305,6 +309,14 @@ button:focus-visible,
     grid-template-areas:
       'hud hud'
       'stage pad';
+  }
+
+  /* Sideways: the pad column moves to the left of the board. */
+  #app.show-touch.in-game.pad-left {
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      'hud hud'
+      'pad stage';
   }
 
   #app.show-touch.in-game .pad-ring {

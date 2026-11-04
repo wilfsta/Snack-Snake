@@ -1,9 +1,10 @@
 import type { AudioManager } from '../../audio/AudioManager';
 import { sanitizeOptions, type GameModeId, type GameOptions } from '../../game/modes';
-import type { StorageManager, TouchControlsPreference } from '../../storage/StorageManager';
+import type { PadSide, StorageManager, TouchControlsPreference } from '../../storage/StorageManager';
 import type { UIManager } from '../../ui/UIManager';
 
 const TOUCH_ORDER: readonly TouchControlsPreference[] = ['auto', 'on', 'off'];
+const SIDE_ORDER: readonly PadSide[] = ['auto', 'left', 'right'];
 
 /** Player preferences: game options, sound, touch pad and remembered selections. */
 export class SettingsService {
@@ -16,6 +17,7 @@ export class SettingsService {
   ) {
     ui.setMuted(audio.muted);
     ui.setTouchPreference(storage.data.device.touchControls);
+    this.applyPadSide();
   }
 
   get options(): GameOptions {
@@ -70,6 +72,19 @@ export class SettingsService {
     this.ui.setTouchPreference(next);
     this.updateTouchVisibility();
     this.audio.play('menuSelect');
+  }
+
+  cyclePadSide(): void {
+    const current = this.storage.profile.settings.padSide;
+    const next = SIDE_ORDER[(SIDE_ORDER.indexOf(current) + 1) % SIDE_ORDER.length];
+    this.storage.updateProfile((p) => (p.settings.padSide = next));
+    this.applyPadSide();
+    this.audio.play('menuSelect');
+  }
+
+  /** Each child keeps their own side; called again when the player changes. */
+  applyPadSide(): void {
+    this.ui.setPadSide(this.storage.profile.settings.padSide);
   }
 
   /** Called the first time the screen is touched, so "auto" can show the pad. */

@@ -95,6 +95,7 @@ export class App implements Navigator {
     this.ui = new UIManager({
       onToggleMute: () => this.settings.toggleMute(),
       onCycleTouchControls: () => this.settings.cycleTouchControls(),
+      onCyclePadSide: () => this.settings.cyclePadSide(),
       onPauseButton: () => this.pause(),
       onTeachingTap: () => this.games.confirm(),
       onFocusMove: () => this.audio.play('menuMove'),
@@ -280,6 +281,7 @@ export class App implements Navigator {
   reloadPlayer(): void {
     this.progress.reload();
     this.rewards.reload();
+    this.settings.applyPadSide();
   }
 
   playWorld(): void {

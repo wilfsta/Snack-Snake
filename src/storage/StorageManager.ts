@@ -31,6 +31,8 @@ export function createBestAvailableStore(): KeyValueStore {
 }
 
 export type TouchControlsPreference = 'auto' | 'on' | 'off';
+/** Which side of the screen the touch pad sits on. "auto": centred below the board upright, on the right sideways. */
+export type PadSide = 'auto' | 'left' | 'right';
 
 /** Settings that belong to the device, not to a child. */
 export interface DeviceSettings {
@@ -47,6 +49,8 @@ export interface ProfileSettings {
   speed: number | null;
   walls: 'wrap' | 'solid' | null;
   answerCount: number | null;
+  /** Left- or right-handed children can move the touch pad to their side. */
+  padSide: PadSide;
 }
 
 /** A world visit left before its end (tab closed, back to the menu...), so the next visit carries on. */
@@ -117,7 +121,7 @@ export const DEFAULT_AVATAR = '🦊';
 export const MAX_NAME_LENGTH = 12;
 
 export function defaultProfileSettings(): ProfileSettings {
-  return { lastPlayUnit: null, lastLearnUnit: null, lastSubject: null, speed: null, walls: null, answerCount: null };
+  return { lastPlayUnit: null, lastLearnUnit: null, lastSubject: null, speed: null, walls: null, answerCount: null, padSide: 'auto' };
 }
 
 export function newProfile(id: string, name: string, avatar: string, createdAt = Date.now()): ProfileData {
@@ -183,6 +187,7 @@ function parseProfileSettings(raw: unknown): ProfileSettings {
     speed: typeof s.speed === 'number' && Number.isFinite(s.speed) ? s.speed : null,
     walls: s.walls === 'wrap' || s.walls === 'solid' ? s.walls : null,
     answerCount: typeof s.answerCount === 'number' && Number.isFinite(s.answerCount) ? s.answerCount : null,
+    padSide: s.padSide === 'left' || s.padSide === 'right' ? s.padSide : 'auto',
   };
 }
 

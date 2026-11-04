@@ -65,6 +65,15 @@ describe('StorageManager', () => {
     expect(p.learning).toEqual(v1.learning);
   });
 
+  it("keeps each child's touch-pad side, defaulting to auto", () => {
+    const save = (padSide: unknown) =>
+      parseSaveData(JSON.stringify({ version: 2, profiles: [{ id: 'a', settings: { padSide } }] })).profiles[0].settings.padSide;
+    expect(save('left')).toBe('left');
+    expect(save('right')).toBe('right');
+    expect(save('upside-down')).toBe('auto');
+    expect(save(undefined)).toBe('auto');
+  });
+
   it('survives corrupt or foreign data', () => {
     expect(parseSaveData('{not json').profiles).toHaveLength(1);
     expect(parseSaveData(JSON.stringify({ version: 99 })).profiles[0].highScores).toEqual({});
