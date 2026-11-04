@@ -38,6 +38,8 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
+  /* No "save image / copy" pop-up on a long press (iOS; Android is handled in App). */
+  -webkit-touch-callout: none;
 }
 
 .sr-only {

@@ -45,6 +45,7 @@ Menus are navigable with arrows/D-pad. Press a controller button once if the bro
 
 - **HTTPS** is required for the offline mode and "Add to Home Screen" (every host above provides it).
 - **Offline:** once opened, the game works without a connection (`public/sw.js`). New versions arrive the next time it's opened online. If you change `sw.js` itself in a way that must drop old caches, bump `CACHE` in it.
+- **Phones:** Android's back gesture/button pauses a game or goes back a screen instead of leaving (a second Back without touching the screen still leaves); the screen stays on only while a game is being played; long-press menus are blocked; and the published page carries a Content Security Policy so it can only load its own files (added at build time in `vite.config.ts`).
 - **Link previews** use the full address of `og-image.png` (`og:image` in `index.html`); change it if the game moves.
 - Icons and the web app manifest are in `public/` (`icon.svg` is the source; the PNGs are rendered from it).
 

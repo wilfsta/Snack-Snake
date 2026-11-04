@@ -1,4 +1,5 @@
 import type { Direction } from '../core/geometry';
+import { BackGuard } from './BackGuard';
 import { GamepadInput } from './GamepadInput';
 import { KeyboardInput } from './KeyboardInput';
 import { TouchInput } from './TouchInput';
@@ -21,11 +22,13 @@ export class InputManager implements InputSink {
   private lastSource: InputSource = 'keyboard';
   private readonly keyboard: KeyboardInput;
   private readonly gamepad: GamepadInput;
+  private readonly backGuard: BackGuard;
 
   constructor(options: InputManagerOptions) {
     this.keyboard = new KeyboardInput(this);
     this.gamepad = new GamepadInput(this, options.onGamepadChange);
     new TouchInput(this, options.touchPad, options.swipeSurface, options.onTouchUsed);
+    this.backGuard = new BackGuard(this);
   }
 
   get lastUsedSource(): InputSource {
@@ -60,5 +63,6 @@ export class InputManager implements InputSink {
   destroy(): void {
     this.keyboard.destroy();
     this.gamepad.destroy();
+    this.backGuard.destroy();
   }
 }

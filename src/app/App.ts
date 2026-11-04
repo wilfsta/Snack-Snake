@@ -1,5 +1,6 @@
 import { AudioManager } from '../audio/AudioManager';
 import { GameLoop } from '../core/GameLoop';
+import { ScreenWakeLock } from '../core/ScreenWakeLock';
 import type { Direction } from '../core/geometry';
 import { StateMachine } from '../core/StateMachine';
 import type { GameModeId } from '../game/modes';
@@ -79,6 +80,8 @@ export class App implements Navigator {
   private readonly playtest = new PlaytestStore(debugRequested());
   private readonly playtestLog = new PlaytestLog(debugRequested());
   private readonly backdrop: BackdropController;
+  /** The screen stays on only while a game is actually being played. */
+  private readonly wakeLock = new ScreenWakeLock();
   /** Where "Done" in Options returns to. */
   private optionsFromPause = false;
 
@@ -134,6 +137,11 @@ export class App implements Navigator {
     });
     window.addEventListener('blur', () => this.pause());
     window.addEventListener('pagehide', () => this.storage.flush());
+    // No long-press menus (copy / share / save image) on phones, except where text is typed or copied.
+    document.addEventListener('contextmenu', (e) => {
+      if (e.target instanceof Element && e.target.closest('input, textarea, .debug-overlay')) return;
+      e.preventDefault();
+    });
 
     this.loop = new GameLoop(
       (dt) => this.update(dt),
@@ -213,6 +221,7 @@ export class App implements Navigator {
 
   private goTo(state: AppState): void {
     if (this.states.current !== state) this.states.transition(state);
+    this.wakeLock.set(state === 'PLAYING');
   }
 
   // ---- Navigator ------------------------------------------------------------------------------
