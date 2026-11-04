@@ -441,7 +441,7 @@ export class CurriculumSession extends BaseSession {
 
   private applyExplore(correct: boolean): void {
     if (!this.explore) return;
-    const result = exploreStep(this.explore, correct, this.streak);
+    const result = exploreStep(this.explore, correct);
     if (result.confirmed) {
       const assumed = { ...this.state.assumed };
       const step = this.tracker.currentStep;

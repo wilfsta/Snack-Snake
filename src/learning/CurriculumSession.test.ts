@@ -12,7 +12,7 @@ import type { CurriculumSession } from './CurriculumSession';
 import { LearningEngine } from './LearningEngine';
 import { LearningTracker } from './LearningTracker';
 import { DEFAULT_PACING } from './pacing';
-import { confidenceFrom, exploreStep, groupSecure, probesNeeded, startExplore } from './placement';
+import { confidenceFrom, exploreStep, groupSecure, PROBES_TO_PASS, startExplore } from './placement';
 import type { ChallengeStage } from './types';
 
 const library = createContentLibrary();
@@ -114,23 +114,25 @@ describe('placement rules', () => {
     expect(confidenceFrom([false, false, true, false])).toBe('struggling');
   });
 
-  it('one right answer is never enough to move past a group, unless a long run backs it up', () => {
-    expect(probesNeeded(1)).toBe(2);
-    expect(probesNeeded(3)).toBe(2);
-    expect(probesNeeded(4)).toBe(1);
+  it('one right answer is never enough to move past a group, however well things are going', () => {
+    expect(PROBES_TO_PASS).toBe(2);
+    let r = exploreStep(startExplore(0, 20), true);
+    expect(r.confirmed).toBeNull();
+    r = exploreStep(r.next!, true);
+    expect(r.confirmed).toEqual({ from: 0, to: 0 });
   });
 
   it('jumps forward while right, and narrows back after a miss', () => {
     let s = startExplore(0, 20);
-    let r = exploreStep(s, true, 1);
+    let r = exploreStep(s, true);
     expect(r.confirmed).toBeNull();
-    r = exploreStep(r.next!, true, 2);
+    r = exploreStep(r.next!, true);
     expect(r.confirmed).toEqual({ from: 0, to: 0 });
     expect(r.next!.target).toBe(2); // jumped two ahead
     s = { lo: 7, hi: 20, target: 14, atTarget: 0, jump: 8 };
-    r = exploreStep(s, false, 0);
+    r = exploreStep(s, false);
     expect(r.next).toMatchObject({ lo: 7, hi: 14, target: 10 });
-    r = exploreStep({ lo: 7, hi: 8, target: 7, atTarget: 0, jump: 1 }, false, 0);
+    r = exploreStep({ lo: 7, hi: 8, target: 7, atTarget: 0, jump: 1 }, false);
     expect(r.next).toBeNull();
     expect(r.edge).toBe(7);
   });
@@ -191,6 +193,29 @@ describe('finding the edge of what a child knows', () => {
     const earlierItems = GROUPS.slice(0, FIRST_MULTIPLICATION).reduce((n, g) => n + g.itemIds.length, 0);
     expect(new Set(log.slice(0, reachedAt + 1).map((t) => t.itemId)).size).toBeLessThan(earlierItems / 10);
     expect(log.slice(0, reachedAt + 1).filter((t) => t.stage === 'introduce')).toEqual([]);
+  });
+
+  it('a child who guesses (1 in 3 with three answers) rarely skips skills they do not know', () => {
+    // Knows the first three groups; anything beyond is a guess until it has been taught.
+    const KNOWN = 2;
+    const RUNS = 150;
+    let skippedAfterOneVisit = 0;
+    let skippedAfterFour = 0;
+    for (let seed = 1; seed <= RUNS; seed++) {
+      const engine = freshEngine(seed);
+      const base = makeChild((g) => g <= KNOWN);
+      const luck = seededRng(seed * 7919);
+      const child: Child = { answer: (id, stage) => base.answer(id, stage) || luck.next() < 1 / 3, taught: base.taught };
+      const wronglySkipped = () =>
+        engine.createCurriculumSession(GARDEN_CURRICULUM, 12, { answerCount: 3 }).groupStatuses().some((s, g) => s.status === 'assumed' && g > KNOWN);
+      play(engine, child, 12);
+      if (wronglySkipped()) skippedAfterOneVisit++;
+      play(engine, child, 36);
+      if (wronglySkipped()) skippedAfterFour++;
+    }
+    // Before two right answers were always required: 47% after one visit, 26% after four.
+    expect(skippedAfterOneVisit / RUNS).toBeLessThan(0.35);
+    expect(skippedAfterFour / RUNS).toBeLessThan(0.15);
   });
 
   it('a lucky start is reconsidered: when later answers go wrong, earlier material comes back', () => {
@@ -331,7 +356,7 @@ describe('developer view', () => {
     expect(before.frontier).toBe(0);
     expect(before.explore).not.toBeNull(); // a fresh child starts with quiet checks
     const child = makeChild((g) => g <= ADD_TO_10);
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
       const ch = session.next();
       const ok = child.answer(ch.itemId, ch.stage);
       session.record({ type: 'answered', challenge: ch, optionId: 'x', correct: ok, attemptNumber: 1, hintStrength: 0 });
@@ -339,12 +364,13 @@ describe('developer view', () => {
     }
     const info = session.debugInfo();
     expect(info.frontier).toBe(session.frontier);
-    expect(info.recent).toHaveLength(6);
+    expect(info.recent).toHaveLength(8);
     expect(info.recent.every((r) => r.kind === 'probe')).toBe(true);
-    // Five checks inside what the child knows, then a jump too far shows up as a miss.
-    expect(info.recent.slice(0, 5).every((r) => r.result === true)).toBe(true);
-    expect(info.recent[5].result).toBe(false);
-    expect(indexOf(info.recent[5].groupId)).toBeGreaterThan(ADD_TO_10);
+    // Checks inside what the child knows are all right; then a jump too far shows up as a miss.
+    const miss = info.recent.findIndex((r) => r.result === false);
+    expect(miss).toBeGreaterThan(3);
+    expect(info.recent.slice(0, miss).every((r) => r.result === true)).toBe(true);
+    expect(indexOf(info.recent[miss].groupId)).toBeGreaterThan(ADD_TO_10);
     expect(info.groups.filter((g) => g.status === 'assumed').length).toBeGreaterThan(0);
     expect(info.groups.find((g) => g.status === 'assumed' && g.how === 'implied')).toBeDefined();
     // Reading the debug view changes nothing.

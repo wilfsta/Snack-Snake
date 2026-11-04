@@ -117,13 +117,12 @@ export function startExplore(frontier: number, groupCount: number): ExploreState
 }
 
 /**
- * Right answers needed at a group before moving past it. Two distinct items normally; once the
- * child has a long unbroken run (several groups' worth of evidence), one more right answer is
- * enough - the run itself is the extra evidence. A single lucky answer can never skip anything.
+ * Right answers (two different items) needed at a group before moving past it. With three
+ * answers on screen a guess is right one time in three, so one answer is never enough: in
+ * simulations, letting a long run of right answers count as the second one made a guessing child
+ * skip skills they didn't know about four times as often, for a saving of only a few questions.
  */
-export function probesNeeded(sessionStreak: number): number {
-  return sessionStreak >= 4 ? 1 : 2;
-}
+export const PROBES_TO_PASS = 2;
 
 export interface ExploreResult {
   /** Next explore state, or null when the edge has been found (the child settles at `edge`). */
@@ -134,10 +133,10 @@ export interface ExploreResult {
   readonly edge: number;
 }
 
-export function exploreStep(s: ExploreState, correctFirstTry: boolean, sessionStreak: number): ExploreResult {
+export function exploreStep(s: ExploreState, correctFirstTry: boolean): ExploreResult {
   if (correctFirstTry) {
     const atTarget = s.atTarget + 1;
-    if (atTarget < probesNeeded(sessionStreak)) return { next: { ...s, atTarget }, confirmed: null, edge: s.lo };
+    if (atTarget < PROBES_TO_PASS) return { next: { ...s, atTarget }, confirmed: null, edge: s.lo };
     const confirmed = { from: s.lo, to: s.target };
     const lo = s.target + 1;
     if (lo >= s.hi) return { next: null, confirmed, edge: lo };
