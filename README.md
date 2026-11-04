@@ -10,6 +10,12 @@ A funny Snake game where you gobble the right answers. Start in the **Number Gar
 
 **Options** (main menu or pause): snake speed, wrap-around vs deadly walls, and how many answers appear (2–6, fewer = easier).
 
+**Grown-ups** (Options → 👪 Grown-ups, behind a "what is 7 × 8?" check that's asked again after 10 minutes): a dashboard with a card per child – when they last played, what they're learning now, this week's days / questions / % right first time / minutes compared with the week before, a 14-day activity chart and the facts that need practice – plus a full report per child (every Garden skill marked learnt, already known, learning now or not yet). From there you can **save a backup** file of every player and **load** it on another device; loading never replaces newer progress. If the browser isn't saving (some private-browsing modes, or storage full), Options and the dashboard say so.
+
+**Unfinished visits:** if a child leaves a Garden visit partway and comes back within 3 hours, the visit carries on (questions done and stars so far), instead of starting again.
+
+**Privacy:** no accounts, adverts, purchases or tracking, and no requests to other sites (the font ships with the game). Everything is stored in the browser on that device; a backup file only exists when a grown-up saves one.
+
 ## Run it
 
 ```bash
@@ -31,13 +37,23 @@ npm run preview  # serve the production build (also LAN-accessible)
 
 Menus are navigable with arrows/D-pad. Press a controller button once if the browser hasn't detected it yet.
 
-**Playtesting:** add `?debug` to the address (e.g. `http://localhost:5173/?debug`) to see what the learning engine is thinking – frontier, confidence, which skill groups are secure/assumed, and why each question was asked. It has buttons to reset the current player. Press ` (backtick) to fold it away. Children never see it. It also has **playtest switches** for trying versions of the Garden with a real child: Sid slows down vs stops while the child thinks, thinking time 50–200%, and 2, 3 or 4 answers. They apply from the next Garden visit, are kept on that device only, and are ignored without `?debug`.
+**Playtesting:** add `?debug` to the address (e.g. `http://localhost:5173/?debug`) to see what the learning engine is thinking – frontier, confidence, which skill groups are secure/assumed, and why each question was asked. It has buttons to reset the current player. Press ` (backtick) to fold it away. Children never see it. It also has **playtest switches** for trying versions of the Garden with a real child: Sid slows down vs stops while the child thinks, thinking time 50–200%, and 2, 3 or 4 answers. They apply from the next Garden visit, are kept on that device only, and are ignored without `?debug`. **Visit notes** record each Garden visit (length, finished or not, right first time, hints, facts missed, bumps, the switches in use); add a comment on the last visit and **Copy all** to paste them anywhere.
+
+## Publishing
+
+`npm run build` produces a static site in `dist/`: upload that folder to any static host (GitHub Pages, Netlify, Cloudflare Pages, your own server). Paths are relative, so it works at a domain root or in a subfolder. No server code or database is needed.
+
+- **HTTPS** is required for the offline mode and "Add to Home Screen" (every host above provides it).
+- **Offline:** once opened, the game works without a connection (`public/sw.js`). New versions arrive the next time it's opened online. If you change `sw.js` itself in a way that must drop old caches, bump `CACHE` in it.
+- **Link previews:** some sites need an absolute address for the preview picture – once you know the final address, change `og:image` in `index.html` to the full URL of `og-image.png`.
+- Icons and the web app manifest are in `public/` (`icon.svg` is the source; the PNGs are rendered from it).
 
 ## Architecture
 
 ```
 src/
-  app/        App = router + top-level state machine. controllers/ (Menu, Game, Backdrop) and services/ (Settings, Progress)
+  app/        App = router + top-level state machine. controllers/ (Menu, Game, Backdrop, Profile, Wardrobe, GrownUp) and
+              services/ (Settings, Progress, Profile, Reward, Backup, dashboard summaries); debug/ = ?debug panel + playtest notes
   worlds/     World definitions: theme + curriculum + warm-up + visit length. gardenCurriculum = the Number Garden journey
   rewards/    Stars (earned for effort and progress, never taken away), garden plants, Sid's wardrobe catalogue
   game/       Grid-authoritative Snake: SnakeSession (in-game phase machine), Snake, Arena, collision, spawner, scoring, modes
@@ -47,7 +63,7 @@ src/
   render/     Canvas: GameRenderer, SnakeRenderer + SnakeAnimator (emotions), skins, tiles, effects
   input/      InputManager merging KeyboardInput, GamepadInput, TouchInput into abstract directions/actions
   audio/      AudioManager (synthesised placeholder sounds; `registerAsset(id, url)` to use real files)
-  storage/    StorageManager behind a KeyValueStore interface (localStorage today)
+  storage/    StorageManager behind a KeyValueStore interface (localStorage today), save status, backup files, sync record shape
   ui/         DOM menus, HUD, teaching banner, spatial focus navigation
 ```
 

@@ -1,18 +1,29 @@
 import type { AudioManager } from '../../audio/AudioManager';
-import { OPERATIONS } from '../../content/arithmetic/operations';
 import { unitId } from '../../content/arithmetic/ArithmeticContent';
-import { buildProgressReport } from '../../learning/report';
+import { OPERATIONS } from '../../content/arithmetic/operations';
+import { randInt, defaultRng } from '../../core/random';
 import type { MergeResult } from '../../storage/backup';
 import { downloadText, pickTextFile } from '../../ui/files';
 import type { UIManager } from '../../ui/UIManager';
 import { NUMBER_GARDEN } from '../../worlds/worlds';
-import type { BackupService } from '../services/BackupService';
+import { saveWarning, type BackupService } from '../services/BackupService';
+import { summarizeChild } from '../services/dashboard';
 import { MAX_PROFILES, type ProfileService } from '../services/ProfileService';
 import type { ProgressService } from '../services/ProgressService';
 import { withClick, type Navigator } from '../types';
 
-/** The grown-ups' corner of Options: a child's progress report, and saving/loading backups. */
+/** After answering the grown-ups' check, it isn't asked again for this long. */
+const GATE_OPEN_MS = 10 * 60 * 1000;
+
+const OTHER_UNITS = OPERATIONS.flatMap((op) => op.units.map((n) => unitId(op, n)));
+
+/**
+ * The grown-ups' area, behind a simple check: a dashboard of every child, each child's full
+ * progress report, backups, and what the game does (and doesn't do) with children's data.
+ */
 export class GrownUpController {
+  private openUntil = 0;
+
   constructor(
     private readonly nav: Navigator,
     private readonly ui: UIManager,
@@ -26,26 +37,75 @@ export class GrownUpController {
     return withClick(this.audio, action);
   }
 
-  showProgress(): void {
-    const player = this.profiles.get(this.profiles.activeId);
-    const otherUnits = OPERATIONS.flatMap((op) => op.units.map((n) => unitId(op, n)));
-    this.ui.showProgressReport(
+  /** The way in: the check first (unless answered a few minutes ago), then the dashboard. */
+  enter(): void {
+    if (Date.now() < this.openUntil) this.showDashboard();
+    else this.askGate(false);
+  }
+
+  private askGate(retry: boolean): void {
+    const a = randInt(defaultRng, 6, 9);
+    const b = randInt(defaultRng, 6, 9);
+    this.ui.showParentGate(
+      { question: `${a} × ${b}`, retry },
       {
-        playerName: player?.name ?? 'Player',
-        avatar: player?.avatar ?? '',
-        visits: this.progress.worldVisits(NUMBER_GARDEN.id),
-        report: buildProgressReport(this.progress.tracker, this.progress.content, NUMBER_GARDEN.curriculum, otherUnits),
+        onAnswer: (text) => {
+          if (Number(text.trim()) === a * b) {
+            this.openUntil = Date.now() + GATE_OPEN_MS;
+            this.audio.play('menuSelect');
+            this.showDashboard();
+          } else {
+            this.audio.play('incorrect');
+            this.askGate(true);
+          }
+        },
+        onCancel: this.click(() => this.nav.openOptions()),
       },
-      this.click(() => this.nav.openOptions()),
     );
   }
 
-  saveBackup(): void {
+  showDashboard(): void {
+    // Make sure the summaries include everything played so far.
+    this.progress.flush();
+    const children = this.profiles.all().map((p, i) => summarizeChild(p, i, this.progress.content, NUMBER_GARDEN.curriculum, OTHER_UNITS));
+    this.ui.showDashboard(
+      { children, saveWarning: saveWarning(this.backups.status) },
+      {
+        onDetails: (id) => this.click(() => this.showReport(id))(),
+        onSaveBackup: this.click(() => this.saveBackup()),
+        onLoadBackup: this.click(() => this.loadBackup()),
+        onAbout: this.click(() => this.showAbout()),
+        onBack: this.click(() => this.nav.openOptions()),
+      },
+    );
+  }
+
+  private showReport(id: string): void {
+    const all = this.profiles.all();
+    const index = all.findIndex((p) => p.id === id);
+    if (index === -1) return this.showDashboard();
+    const profile = all[index];
+    const summary = summarizeChild(profile, index, this.progress.content, NUMBER_GARDEN.curriculum, OTHER_UNITS);
+    this.ui.showProgressReport(
+      { playerName: summary.name, avatar: profile.avatar, visits: profile.worldVisits[NUMBER_GARDEN.id] ?? 0, report: summary.report },
+      this.click(() => this.showDashboard()),
+    );
+  }
+
+  private showAbout(): void {
+    this.notice('🔒', 'About & privacy', [
+      'Snack Snake has no accounts, no adverts, no in-app purchases and no tracking.',
+      'Names, stars and learning progress are stored only in this browser on this device. Nothing is sent anywhere.',
+      'A backup file is the only copy that leaves the browser, and only when you save one.',
+    ]);
+  }
+
+  private saveBackup(): void {
     const file = this.backups.createFile();
     downloadText(file.name, file.text);
   }
 
-  loadBackup(): void {
+  private loadBackup(): void {
     pickTextFile(
       '.json,application/json',
       (text) => {
@@ -63,7 +123,7 @@ export class GrownUpController {
   }
 
   private notice(icon: string, title: string, lines: readonly string[]): void {
-    this.ui.showNotice({ icon, title, lines }, this.click(() => this.nav.openOptions()));
+    this.ui.showNotice({ icon, title, lines }, this.click(() => this.showDashboard()));
   }
 }
 

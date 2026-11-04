@@ -60,6 +60,26 @@ export interface UnfinishedVisit {
   readonly at: number;
 }
 
+/** How much a player played on one day (for the grown-ups' dashboard). */
+export interface DayActivity {
+  /** Questions answered. */
+  readonly questions: number;
+  /** Of those, right first time. */
+  readonly firstTry: number;
+  /** Time spent playing, in milliseconds. */
+  readonly ms: number;
+}
+
+/** Days of activity kept per player. */
+export const ACTIVITY_DAYS_KEPT = 90;
+
+/** Local calendar day, e.g. "2026-11-01". */
+export function dayKey(time: number): string {
+  const d = new Date(time);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** Everything that belongs to one player. */
 export interface ProfileData {
   id: string;
@@ -77,6 +97,8 @@ export interface ProfileData {
   onboarded: string[];
   /** The world visit this player left unfinished, if any. */
   visit: UnfinishedVisit | null;
+  /** Play per day ("2026-11-01" → activity), the last ACTIVITY_DAYS_KEPT days. */
+  activity: Record<string, DayActivity>;
   /** Opaque to storage; the rewards module validates its own state (stars, wardrobe). */
   rewards: unknown;
   /** Opaque to storage; the learning module validates its own snapshot. */
@@ -111,6 +133,7 @@ export function newProfile(id: string, name: string, avatar: string, createdAt =
     worldVisits: {},
     onboarded: [],
     visit: null,
+    activity: {},
     rewards: null,
     learning: null,
   };
@@ -137,6 +160,18 @@ export function parseVisit(raw: unknown): UnfinishedVisit | null {
   const v = raw as Record<string, unknown>;
   if (typeof v.worldId !== 'string' || !v.worldId || typeof v.at !== 'number' || !Number.isFinite(v.at)) return null;
   return { worldId: v.worldId, done: count(v.done), stars: count(v.stars), newPlants: count(v.newPlants), at: v.at };
+}
+
+export function parseActivity(raw: unknown): Record<string, DayActivity> {
+  const out: Record<string, DayActivity> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [day, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !value || typeof value !== 'object') continue;
+    const v = value as Record<string, unknown>;
+    const questions = count(v.questions);
+    out[day] = { questions, firstTry: Math.min(count(v.firstTry), questions), ms: count(v.ms) };
+  }
+  return out;
 }
 
 function parseProfileSettings(raw: unknown): ProfileSettings {
@@ -177,6 +212,7 @@ export function parseProfile(raw: Record<string, unknown>, fallbackId: string): 
       : Object.entries(numberRecord(raw.worldVisits)).filter(([, n]) => n > 0).map(([w]) => w),
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : createdAt,
     visit: parseVisit(raw.visit),
+    activity: parseActivity(raw.activity),
     rewards: raw.rewards ?? null,
     learning: raw.learning ?? null,
   };
@@ -224,11 +260,21 @@ export function parseSaveData(json: string | null): SaveData {
 }
 
 /**
+ * Whether progress is really being kept:
+ *  - ok:           saved in the browser
+ *  - memory-only:  the browser won't let us save at all (e.g. some private browsing); progress
+ *                  lasts until the page is closed
+ *  - write-failed: the last save didn't work (e.g. storage full); progress is safe in memory
+ */
+export type SaveStatus = 'ok' | 'memory-only' | 'write-failed';
+
+/**
  * Holds the save data in memory and writes it out (debounced) through a KeyValueStore.
  */
 export class StorageManager {
   private current: SaveData;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private lastWriteFailed = false;
 
   constructor(
     private readonly store: KeyValueStore,
@@ -241,6 +287,12 @@ export class StorageManager {
       json = null;
     }
     this.current = parseSaveData(json);
+  }
+
+  /** Grown-ups are told when progress isn't being saved, instead of finding out later. */
+  get status(): SaveStatus {
+    if (this.store instanceof MemoryStore) return 'memory-only';
+    return this.lastWriteFailed ? 'write-failed' : 'ok';
   }
 
   get data(): Readonly<SaveData> {
@@ -286,8 +338,11 @@ export class StorageManager {
   private write(): void {
     try {
       this.store.setItem(this.key, JSON.stringify(this.current));
+      this.lastWriteFailed = false;
     } catch {
-      // Storage full or unavailable: keep playing; progress stays in memory for this visit.
+      // Storage full or unavailable: keep playing; progress stays in memory for this visit,
+      // and `status` lets the grown-ups' screens say so.
+      this.lastWriteFailed = true;
     }
   }
 }

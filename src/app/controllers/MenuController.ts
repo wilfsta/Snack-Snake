@@ -4,6 +4,7 @@ import { MULTIPLICATION, operationById, OPERATIONS } from '../../content/arithme
 import { MAX_ANSWERS, MIN_ANSWERS, SPEED_LEVELS, type GameModeId } from '../../game/modes';
 import type { TableChoice, UIManager } from '../../ui/UIManager';
 import type { GrownUpController } from './GrownUpController';
+import { saveWarning, type BackupService } from '../services/BackupService';
 import { NUMBER_GARDEN } from '../../worlds/worlds';
 import type { ProgressService } from '../services/ProgressService';
 import type { ProfileService } from '../services/ProfileService';
@@ -42,6 +43,7 @@ export class MenuController {
     private readonly rewards: RewardService,
     private readonly profiles: ProfileService,
     private readonly grownUps: GrownUpController,
+    private readonly backups: BackupService,
   ) {}
 
   private click(action: () => void): () => void {
@@ -122,7 +124,7 @@ export class MenuController {
         minAnswers: MIN_ANSWERS,
         maxAnswers: MAX_ANSWERS,
         inGame,
-        playerName: this.profiles.get(this.profiles.activeId)?.name ?? 'Player',
+        saveWarning: saveWarning(this.backups.status),
       },
       {
         onSpeed: (speed) => this.settings.setSpeed(speed),
@@ -135,9 +137,7 @@ export class MenuController {
           this.progress.flush();
           this.nav.closeOptions();
         }),
-        onProgress: this.click(() => this.grownUps.showProgress()),
-        onSaveBackup: this.click(() => this.grownUps.saveBackup()),
-        onLoadBackup: this.click(() => this.grownUps.loadBackup()),
+        onGrownUps: this.click(() => this.grownUps.enter()),
       },
     );
   }

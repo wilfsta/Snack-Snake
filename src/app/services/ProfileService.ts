@@ -1,5 +1,5 @@
 import { balance, sanitizeRewardState } from '../../rewards/economy';
-import { MAX_NAME_LENGTH, newProfile, type StorageManager } from '../../storage/StorageManager';
+import { MAX_NAME_LENGTH, newProfile, type ProfileData, type StorageManager } from '../../storage/StorageManager';
 
 /** Picture choices for a player. Animals, so even non-readers can find their own. */
 export const AVATARS: readonly string[] = ['🦊', '🐼', '🐸', '🐯', '🐵', '🦄', '🐙', '🐶', '🐱', '🐰', '🦁', '🐨'];
@@ -39,6 +39,11 @@ export class ProfileService {
       stars: balance(sanitizeRewardState(p.rewards)),
       active: p.id === active,
     }));
+  }
+
+  /** Every player's full data, read-only (for the grown-ups' dashboard). */
+  all(): readonly Readonly<ProfileData>[] {
+    return this.storage.data.profiles;
   }
 
   get(id: string): ProfileSummary | undefined {

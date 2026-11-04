@@ -50,7 +50,12 @@ interface ActiveGame {
   readonly doneBefore: number;
   /** What was last saved as the unfinished visit, to save only when it changes. */
   savedVisit: string;
+  /** Play time not yet added to today's activity. */
+  unrecordedMs: number;
 }
+
+/** Play time is added to the day's activity at least this often. */
+const ACTIVITY_FLUSH_MS = 15_000;
 
 export interface FrameState {
   readonly playing: boolean;
@@ -161,6 +166,7 @@ export class GameController {
       newPlants: carried?.newPlants ?? 0,
       doneBefore: carried?.done ?? 0,
       savedVisit: '',
+      unrecordedMs: 0,
     };
     this.visitNotes = world && this.playtestLog.active ? new VisitRecorder(this.playerLabel(), this.playtest.settings, carried !== null) : null;
     this.skin = this.rewards.skin();
@@ -170,6 +176,7 @@ export class GameController {
   }
 
   stop(): void {
+    if (this.game) this.recordPlayTime(this.game);
     this.game = null;
     this.visitNotes = null;
     this.ui.hideTeaching();
@@ -205,6 +212,7 @@ export class GameController {
   showGameOver(info: GameOverInfo): void {
     const game = this.game;
     if (!game) return;
+    this.recordPlayTime(game);
     const { previous, newBest } = this.progress.recordResult(game.spec.mode, game.spec.unitId, info.score, info.bestStreak);
     const text = DEATH_TEXT[info.cause];
     this.ui.showGameOver(
@@ -227,6 +235,7 @@ export class GameController {
   showSessionComplete(): void {
     const game = this.game;
     if (!game) return;
+    this.recordPlayTime(game);
     if (game.world) this.progress.clearVisit();
     if (game.world && this.visitNotes) this.playtestLog.save(this.visitNotes.finish());
     this.progress.flush();
@@ -344,6 +353,7 @@ export class GameController {
         break;
       }
       case 'correct': {
+        if (game.spec.mode !== 'classic') this.progress.recordActivity({ questions: 1, firstTry: event.firstTry ? 1 : 0 });
         this.giveStars(game, STAR_RULES.questionCompleted);
         this.animator.celebrate(event.streak);
         this.effects.burst(tileCenter(event.tile), event.streak >= 5 ? 30 : 18);
@@ -431,7 +441,11 @@ export class GameController {
     const game = this.game;
     if (!game) return;
     const session = game.session;
-    if (frame.playing) session.update(dtMs);
+    if (frame.playing) {
+      session.update(dtMs);
+      game.unrecordedMs += dtMs;
+      if (game.unrecordedMs >= ACTIVITY_FLUSH_MS) this.recordPlayTime(game);
+    }
     this.saveVisit(game);
     const hint = session.hintTile;
     const phase = session.phase.kind;
@@ -447,6 +461,13 @@ export class GameController {
       streak: session.score.streak,
     });
     this.effects.update(dtMs / 1000);
+  }
+
+  /** Adds play time so far to today's activity (for the grown-ups' dashboard). */
+  private recordPlayTime(game: ActiveGame): void {
+    if (game.unrecordedMs <= 0) return;
+    this.progress.recordActivity({ ms: game.unrecordedMs });
+    game.unrecordedMs = 0;
   }
 
   /** In a world, keeps the visit so far saved, so it can carry on if the page is closed. */

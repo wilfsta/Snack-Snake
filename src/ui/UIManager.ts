@@ -123,8 +123,8 @@ export interface OptionsView {
   readonly minAnswers: number;
   readonly maxAnswers: number;
   readonly inGame: boolean;
-  /** Whose progress the grown-ups' buttons are about. */
-  readonly playerName: string;
+  /** Shown when progress isn't being saved, so a grown-up finds out straight away. */
+  readonly saveWarning: string | null;
 }
 
 export interface OptionsHandlers {
@@ -132,10 +132,55 @@ export interface OptionsHandlers {
   onWalls(walls: 'wrap' | 'solid'): void;
   onAnswers(count: number): void;
   onBack(): void;
-  /** Grown-ups' tools; only offered outside a game. */
-  onProgress(): void;
+  /** Into the grown-ups' area (dashboard, reports, backups); only offered outside a game. */
+  onGrownUps(): void;
+}
+
+export interface ParentGateView {
+  /** A sum young children can't do yet, e.g. "7 × 8". */
+  readonly question: string;
+  /** True after a wrong answer. */
+  readonly retry: boolean;
+}
+
+export interface ParentGateHandlers {
+  onAnswer(text: string): void;
+  onCancel(): void;
+}
+
+export interface ActivityTotalsView {
+  readonly days: number;
+  readonly questions: number;
+  readonly firstTry: number;
+  readonly minutes: number;
+}
+
+export interface DashboardChildView {
+  readonly id: string;
+  readonly name: string;
+  readonly avatar: string;
+  readonly stars: number;
+  readonly daysSincePlayed: number | null;
+  readonly nowLearning: string | null;
+  readonly skillsPassed: number;
+  readonly skillCount: number;
+  readonly thisWeek: ActivityTotalsView;
+  readonly lastWeek: ActivityTotalsView;
+  readonly recent: readonly { readonly day: string; readonly questions: number }[];
+  readonly needsPractice: readonly string[];
+}
+
+export interface DashboardView {
+  readonly children: readonly DashboardChildView[];
+  readonly saveWarning: string | null;
+}
+
+export interface DashboardHandlers {
+  onDetails(id: string): void;
   onSaveBackup(): void;
   onLoadBackup(): void;
+  onAbout(): void;
+  onBack(): void;
 }
 
 export interface ProgressReportView {
@@ -466,20 +511,13 @@ export class UIManager {
         ),
         this.settingsRow(null, true),
         view.inGame ? el('p', { class: 'option-note', text: 'Speed and edges change from the next game.' }) : null,
+        view.saveWarning ? el('p', { class: 'save-warning', text: view.saveWarning, attrs: { role: 'alert' } }) : null,
         view.inGame
           ? null
           : el(
               'div',
-              { class: 'option-group grown-ups' },
-              el('div', { class: 'option-label' }, el('span', { text: 'For grown-ups' })),
-              el(
-                'div',
-                { class: 'grown-up-buttons' },
-                button(`📊 How ${view.playerName} is doing`, 'small-btn', handlers.onProgress),
-                button('💾 Save a backup', 'small-btn', handlers.onSaveBackup),
-                button('📂 Load a backup', 'small-btn', handlers.onLoadBackup),
-              ),
-              el('p', { class: 'option-note', text: 'Progress is kept in this browser only. A backup file keeps it safe and moves it to another device.' }),
+              { class: 'grown-up-buttons' },
+              button('👪 Grown-ups: progress & backups', 'small-btn', handlers.onGrownUps),
             ),
         button('✓ Done', 'big-btn primary', handlers.onBack),
       ),
@@ -808,6 +846,101 @@ export class UIManager {
       ),
     );
     this.show(screen, onCancel);
+  }
+
+  /** "Grown-ups only": a sum to type in, so children don't wander into the dashboard. */
+  showParentGate(view: ParentGateView, h: ParentGateHandlers): void {
+    const input = el('input', {
+      class: 'name-input gate-input',
+      attrs: { type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: '4', autocomplete: 'off', 'aria-label': `What is ${view.question}?`, 'data-autofocus': '' },
+    });
+    const submit = () => h.onAnswer(input.value);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submit();
+      }
+    });
+    const screen = el(
+      'div',
+      { class: 'screen overlay-screen' },
+      el(
+        'div',
+        { class: `card gate-card${view.retry ? ' shake' : ''}` },
+        el('div', { class: 'confirm-icon', text: '👪', attrs: { 'aria-hidden': 'true' } }),
+        el('h2', { class: 'notice-title', text: 'Grown-ups only' }),
+        el('p', { class: 'muted', text: view.retry ? 'Not quite – try this one:' : 'To carry on, please answer:' }),
+        el('div', { class: 'gate-question', text: `${view.question} =` }),
+        input,
+        el('div', { class: 'row-buttons' }, button('✓ Go', 'big-btn primary', submit), button('✕ Cancel', 'big-btn', h.onCancel)),
+      ),
+    );
+    this.show(screen, h.onCancel);
+  }
+
+  /** All the children at a glance: how much they've played, what they're learning, what needs practice. */
+  showDashboard(view: DashboardView, h: DashboardHandlers): void {
+    const cards = view.children.map((c) => {
+      const played =
+        c.daysSincePlayed === null ? 'Not played yet' : c.daysSincePlayed === 0 ? 'Played today' : c.daysSincePlayed === 1 ? 'Played yesterday' : `Last played ${c.daysSincePlayed} days ago`;
+      const w = c.thisWeek;
+      const week =
+        w.questions > 0
+          ? `${w.days} ${w.days === 1 ? 'day' : 'days'} · ${w.questions} questions · ${Math.round((w.firstTry / w.questions) * 100)}% right first time · ${w.minutes} min`
+          : 'No questions answered this week';
+      const lastWeek = c.lastWeek.questions > 0 ? `Week before: ${c.lastWeek.questions} questions on ${c.lastWeek.days} ${c.lastWeek.days === 1 ? 'day' : 'days'}` : null;
+      const max = Math.max(1, ...c.recent.map((d) => d.questions));
+      const chart = el(
+        'div',
+        { class: 'activity-chart', attrs: { role: 'img', 'aria-label': `Questions per day, last ${c.recent.length} days: ${c.recent.map((d) => d.questions).join(', ')}` } },
+        ...c.recent.map((d, i) => {
+          const bar = el('span', { class: `activity-bar${d.questions === 0 ? ' empty' : ''}${i === c.recent.length - 1 ? ' today' : ''}`, attrs: { title: `${d.day}: ${d.questions}` } });
+          bar.style.height = d.questions === 0 ? '' : `${Math.max(8, Math.round((d.questions / max) * 100))}%`;
+          return bar;
+        }),
+      );
+      return el(
+        'section',
+        { class: 'child-card' },
+        el(
+          'div',
+          { class: 'child-head' },
+          el('span', { class: 'child-avatar', text: c.avatar, attrs: { 'aria-hidden': 'true' } }),
+          el('div', { class: 'child-title' }, el('strong', { text: c.name }), el('span', { class: 'child-played', text: played })),
+          el('span', { class: 'child-stars', text: `⭐ ${c.stars}` }),
+        ),
+        el('p', { class: 'child-line' }, el('strong', { text: 'Learning: ' }), c.nowLearning ?? (c.skillsPassed === c.skillCount && c.skillCount > 0 ? 'Garden journey complete 🎉' : 'Not started yet')),
+        el('p', { class: 'child-line' }, el('strong', { text: 'Garden skills: ' }), `${c.skillsPassed} of ${c.skillCount}`),
+        el('p', { class: 'child-line' }, el('strong', { text: 'This week: ' }), week),
+        lastWeek ? el('p', { class: 'child-line muted-line', text: lastWeek }) : null,
+        chart,
+        el('div', { class: 'chart-axis', attrs: { 'aria-hidden': 'true' } }, el('span', { text: '2 weeks ago' }), el('span', { text: 'today' })),
+        c.needsPractice.length > 0
+          ? el('p', { class: 'child-line' }, el('strong', { text: 'Needs practice: ' }), c.needsPractice.join(' · '))
+          : null,
+        button(`📊 Full report for ${c.name}`, 'small-btn', () => h.onDetails(c.id)),
+      );
+    });
+    const screen = el(
+      'div',
+      { class: 'screen overlay-screen' },
+      el(
+        'div',
+        { class: 'card wide-card options-card dashboard-card' },
+        el('h2', { class: 'report-title', text: '👪 Grown-ups' }),
+        view.saveWarning ? el('p', { class: 'save-warning', text: view.saveWarning, attrs: { role: 'alert' } }) : null,
+        el('div', { class: 'report-body dashboard-body' }, ...cards),
+        el(
+          'div',
+          { class: 'grown-up-buttons' },
+          button('💾 Save a backup', 'small-btn', h.onSaveBackup),
+          button('📂 Load a backup', 'small-btn', h.onLoadBackup),
+          button('🔒 About & privacy', 'small-btn', h.onAbout),
+        ),
+        button('◀ Back', 'big-btn primary', h.onBack, { 'data-autofocus': '' }),
+      ),
+    );
+    this.show(screen, h.onBack);
   }
 
   /** A message for grown-ups with a single OK. */

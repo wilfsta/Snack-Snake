@@ -102,8 +102,9 @@ export class App implements Navigator {
     this.rewards = new RewardService(this.storage);
     this.profiles = new ProfileService(this.storage);
     this.profileScreens = new ProfileController(this, this.ui, this.audio, this.profiles);
-    const grownUps = new GrownUpController(this, this.ui, this.audio, this.progress, this.profiles, new BackupService(this.storage));
-    this.menus = new MenuController(this, this.ui, this.audio, this.settings, this.progress, this.rewards, this.profiles, grownUps);
+    const backups = new BackupService(this.storage);
+    const grownUps = new GrownUpController(this, this.ui, this.audio, this.progress, this.profiles, backups);
+    this.menus = new MenuController(this, this.ui, this.audio, this.settings, this.progress, this.rewards, this.profiles, grownUps, backups);
     this.games = new GameController(this, this.ui, this.audio, this.renderer, this.settings, this.progress, this.rewards, this.playtest, this.playtestLog, () => {
       const p = this.profiles.get(this.profiles.activeId);
       return p ? `${p.avatar} ${p.name}` : '?';

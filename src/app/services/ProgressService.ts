@@ -2,7 +2,7 @@ import { createContentLibrary, type ContentLibrary } from '../../content/Content
 import { highScoreKey, isNewHighScore } from '../../game/scoring';
 import { LearningEngine } from '../../learning/LearningEngine';
 import { LearningTracker } from '../../learning/LearningTracker';
-import type { StorageManager, UnfinishedVisit } from '../../storage/StorageManager';
+import { ACTIVITY_DAYS_KEPT, dayKey, type StorageManager, type UnfinishedVisit } from '../../storage/StorageManager';
 
 /** An unfinished visit is carried on only if the child comes back within this time (same sitting). */
 export const VISIT_RESUME_MS = 3 * 60 * 60 * 1000;
@@ -102,6 +102,17 @@ export class ProgressService {
   clearVisit(): void {
     if (this.storage.profile.visit === null) return;
     this.storage.updateProfile((p) => (p.visit = null), true);
+  }
+
+  /** Adds to today's activity (questions answered, right first time, time played). */
+  recordActivity(add: { questions?: number; firstTry?: number; ms?: number }, now = Date.now()): void {
+    const today = dayKey(now);
+    this.storage.updateProfile((p) => {
+      const day = p.activity[today] ?? { questions: 0, firstTry: 0, ms: 0 };
+      p.activity[today] = { questions: day.questions + (add.questions ?? 0), firstTry: day.firstTry + (add.firstTry ?? 0), ms: day.ms + Math.round(add.ms ?? 0) };
+      const days = Object.keys(p.activity).sort();
+      for (const old of days.slice(0, Math.max(0, days.length - ACTIVITY_DAYS_KEPT))) delete p.activity[old];
+    });
   }
 
   flush(): void {
