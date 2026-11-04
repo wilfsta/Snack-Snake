@@ -11,7 +11,7 @@ void document.fonts?.load("700 32px 'Fredoka'").catch(() => undefined);
 const app = new App();
 app.start();
 
-// Published builds work offline once opened (see public/sw.js). Not in development, where it
+// Published builds work offline once opened (see src/sw.js). Not in development, where it
 // would serve stale files.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {

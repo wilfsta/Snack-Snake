@@ -77,6 +77,61 @@ describe('loading a backup', () => {
     expect(result.added).toEqual(['Ada']);
   });
 
+  it('keeps what a child did on both devices after they went separate ways', () => {
+    const tablet = new LearningTracker();
+    tablet.markIntroduced('add:2+3');
+    const phone = new LearningTracker();
+    phone.markIntroduced('add:4+4');
+    const here = {
+      ...player('p1', 'Ada', 5000),
+      highScores: { a: 50, b: 10 },
+      activity: { '2026-11-01': { questions: 8, firstTry: 6, ms: 60000 } },
+      learning: tablet.snapshot(),
+      rewards: { starsEarned: 20, starsSpent: 5, gardenStars: 20, owned: ['skin:classic', 'hat:cap'], equipped: { hat: 'hat:cap', face: null, skin: 'skin:classic' }, milestones: ['g1'] },
+    };
+    const there = {
+      ...player('p1', 'Ada', 9000),
+      highScores: { a: 30, b: 40 },
+      activity: { '2026-11-02': { questions: 4, firstTry: 4, ms: 30000 } },
+      learning: phone.snapshot(),
+      rewards: { starsEarned: 25, starsSpent: 0, gardenStars: 25, owned: ['skin:classic'], equipped: { hat: null, face: null, skin: 'skin:classic' }, milestones: ['g2'] },
+    };
+    const data = save(here);
+    const result = mergeBackup(data, roundTrip(there), 6);
+    const ada = data.profiles[0];
+    expect(result.updated).toEqual(['Ada']);
+    expect(ada.highScores).toEqual({ a: 50, b: 40 });
+    expect(Object.keys(ada.activity).sort()).toEqual(['2026-11-01', '2026-11-02']);
+    const records = (ada.learning as { records: Record<string, unknown> }).records;
+    expect(Object.keys(records).sort()).toEqual(['add:2+3', 'add:4+4']);
+    const rewards = ada.rewards as { starsEarned: number; owned: string[]; milestones: string[] };
+    expect(rewards.starsEarned).toBe(25);
+    expect(rewards.owned).toContain('hat:cap');
+    expect(rewards.milestones.sort()).toEqual(['g1', 'g2']);
+    expect(ada.updatedAt).toBe(9000);
+  });
+
+  it('for each fact, keeps the copy that has seen it more often', () => {
+    const more = new LearningTracker();
+    more.markIntroduced('add:2+3');
+    more.markPresented('add:2+3');
+    more.markPresented('add:2+3');
+    const less = new LearningTracker();
+    less.markIntroduced('add:2+3');
+    const seen = (p: ProfileData) => (p.learning as { records: Record<string, { timesPresented: number }> }).records['add:2+3'].timesPresented;
+    const data = save({ ...player('p1', 'Ada', 5000), learning: more.snapshot() });
+    mergeBackup(data, roundTrip({ ...player('p1', 'Ada', 9000), learning: less.snapshot() }), 6);
+    expect(seen(data.profiles[0])).toBe(more.snapshot().records['add:2+3'].timesPresented);
+    expect(seen(data.profiles[0])).toBeGreaterThan(less.snapshot().records['add:2+3'].timesPresented);
+  });
+
+  it('recognises a child who was renamed on one device', () => {
+    const data = save(player('p2', 'Bo', 5000, 1_700_000_000_000));
+    const result = mergeBackup(data, roundTrip(player('p2', 'Bobby', 9000, 1_700_000_000_000)), 6);
+    expect(data.profiles.map((p) => p.name)).toEqual(['Bobby']);
+    expect(result.updated).toEqual(['Bobby']);
+  });
+
   it('leaves out players beyond the limit and says so', () => {
     const data = save(player('a', 'A', 1), player('b', 'B', 1));
     const result = mergeBackup(data, roundTrip(player('c', 'C', 1), player('d', 'D', 1)), 3);

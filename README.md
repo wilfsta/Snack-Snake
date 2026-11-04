@@ -46,7 +46,7 @@ Menus are navigable with arrows/D-pad. Press a controller button once if the bro
 **Live at https://wilfsta.github.io/Snack-Snake/** – every push to `main` runs the tests, builds and publishes it (`.github/workflows/deploy.yml`; GitHub Pages must be set to "GitHub Actions" under Settings → Pages). `npm run build` produces a static site in `dist/`: it can also be uploaded to any static host (GitHub Pages, Netlify, Cloudflare Pages, your own server). Paths are relative, so it works at a domain root or in a subfolder. No server code or database is needed.
 
 - **HTTPS** is required for the offline mode and "Add to Home Screen" (every host above provides it).
-- **Offline:** once opened, the game works without a connection (`public/sw.js`). New versions arrive the next time it's opened online. If you change `sw.js` itself in a way that must drop old caches, bump `CACHE` in it.
+- **Offline:** once opened, the game works without a connection (`src/sw.js`, filled in by the build with that version's file list). New versions arrive the next time it's opened online, and each one replaces the previous version's cache, so old files don't pile up on the device.
 - **Phones:** Android's back gesture/button pauses a game or goes back a screen instead of leaving (a second Back without touching the screen still leaves); the screen stays on only while a game is being played; long-press menus are blocked; and the published page carries a Content Security Policy so it can only load its own files (added at build time in `vite.config.ts`).
 - **Link previews** use the full address of `og-image.png` (`og:image` in `index.html`); change it if the game moves.
 - Icons and the web app manifest are in `public/` (`icon.svg` is the source; the PNGs are rendered from it).

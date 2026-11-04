@@ -1,3 +1,4 @@
+import { mergeProfiles } from './mergeProfiles';
 import type { ProfileData, SaveData } from './StorageManager';
 import { fromSyncRecord, toSyncRecord, type ProfileSyncRecord } from './profileSync';
 
@@ -58,12 +59,14 @@ export interface MergeResult {
 
 /**
  * Brings a backup's players into the save. Loading a backup never loses progress: a player who
- * is already here is only replaced when the backup's copy is newer. An unused, unnamed starter
- * player (a fresh device) is replaced by the backup instead of taking up a place.
+ * is already here is combined with the backup's copy (see mergeProfiles), so a child who played
+ * on both devices keeps everything from each. An unused, unnamed starter player (a fresh device)
+ * is replaced by the backup instead of taking up a place.
  *
  * Ids alone don't prove two copies are the same child (every device's first player is "p1"), so
- * a copy only counts as the same player when its id, name and creation time all match. Anything
- * else is added as a new player: a duplicate can be deleted, lost progress can't be got back.
+ * a copy only counts as the same player when its id and creation time match (and, for the
+ * starter player, whose creation time is the same everywhere, its name too). Anything else is
+ * added as a new player: a duplicate can be deleted, lost progress can't be got back.
  */
 export function mergeBackup(data: SaveData, incoming: readonly ProfileData[], maxProfiles: number): MergeResult {
   const added: string[] = [];
@@ -80,11 +83,12 @@ export function mergeBackup(data: SaveData, incoming: readonly ProfileData[], ma
     const taken = i === -1 && data.profiles.some((p) => p.id === original.id);
     const profile = taken ? { ...original, id: freshId(data.profiles, original.id) } : original;
     if (i !== -1) {
-      if (profile.updatedAt > data.profiles[i].updatedAt) {
-        data.profiles[i] = profile;
-        updated.push(label(profile));
+      const merged = mergeProfiles(data.profiles[i], profile);
+      if (JSON.stringify(merged) !== JSON.stringify(data.profiles[i])) {
+        data.profiles[i] = merged;
+        updated.push(label(merged));
       } else {
-        unchanged.push(label(profile));
+        unchanged.push(label(merged));
       }
     } else if (data.profiles.length < maxProfiles) {
       data.profiles.push(profile);
@@ -98,7 +102,8 @@ export function mergeBackup(data: SaveData, incoming: readonly ProfileData[], ma
 }
 
 function samePlayer(a: ProfileData, b: ProfileData): boolean {
-  return a.id === b.id && a.name === b.name && a.createdAt === b.createdAt;
+  // A real creation time is unique enough to recognise a child who has been renamed since.
+  return a.id === b.id && a.createdAt === b.createdAt && (a.createdAt !== 0 || a.name === b.name);
 }
 
 function freshId(existing: readonly ProfileData[], base: string): string {

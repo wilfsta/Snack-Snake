@@ -372,6 +372,8 @@ export class GameController {
       }
       case 'wrong':
         if (event.fatal) {
+          // The question ends here (Play mode), so it counts for the grown-ups' dashboard as missed.
+          if (game.spec.mode !== 'classic') this.progress.recordActivity({ questions: 1, firstTry: 0 });
           this.audio.play('incorrect');
         } else {
           this.animator.spitOut();
