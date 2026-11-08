@@ -28,11 +28,13 @@ self.addEventListener('install', (event) => {
   );
 });
 
+// Only this game's own old caches: other sites on the same address (every GitHub Pages project of
+// one account shares wilfsta.github.io) keep theirs.
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('snack-snake-') && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
